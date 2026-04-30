@@ -1,0 +1,19 @@
+# Exclude sensitive and unnecessary files from Netlify uploads
+.env
+.env.local
+.env.*.local
+.git
+.gitignore
+.vscode
+.idea
+node_modules
+data/
+!data/communities_anjuke_ids.json
+scripts/
+utils/
+config.py
+main.py
+requirements.txt
+supabase_setup.sql
+UPDATING_ANJUKE_DATA.md
+README.md
