@@ -41,7 +41,7 @@ function ListingCard({
 }) {
   const openModal = useStore((s) => s.openModal)
   const toggleSavedListing = useStore((s) => s.toggleSavedListing)
-  const setMapFocusedListingId = useStore((s) => s.setMapFocusedListingId)
+  const flyToListingOnMap = useStore((s) => s.flyToListingOnMap)
   const mapFocusedListingId = useStore((s) => s.mapFocusedListingId)
   const saved = useStore((s) => s.savedListings.some((x) => x.listing.id === listing.id))
   const highlighted = mapFocusedListingId === listing.id
@@ -252,7 +252,7 @@ function ListingCard({
         </button>
         <button
           type="button"
-          onClick={() => setMapFocusedListingId(listing.id)}
+          onClick={() => flyToListingOnMap(listing.id)}
           className="flex items-center gap-1 text-xs text-gray-500 hover:text-[var(--color-primary)] transition-colors cursor-pointer"
           title="Show on map"
         >

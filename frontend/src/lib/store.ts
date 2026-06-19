@@ -67,15 +67,22 @@ interface AppState {
   }) => void
   removeSavedListing: (id: number) => void
 
-  /** Highlights a listing card + drives map fly-to (saved stars or community offsets). */
+  /** Highlights a listing card; map fly-to only when `flyToListingOnMap` is used. */
   mapFocusedListingId: number | null
   setMapFocusedListingId: (id: number | null) => void
+  /** Bumped by panel "On map" — MapFocusController flies when this changes. */
+  mapFlyToNonce: number
+  flyToListingOnMap: (id: number) => void
   /** Panel listing order for map offsets in community mode (synced from ListingPanel). */
   panelListingOrderIds: number[]
   setPanelListingOrderIds: (ids: number[]) => void
 
   sort: SortMode
   setSort: (sort: SortMode) => void
+
+  /** Saved view: hide delisted Anjuke listings (title contains 【已下架】). */
+  hideOffMarket: boolean
+  setHideOffMarket: (hide: boolean) => void
 
   /** Current listing filters — map & panel update as values change. */
   appliedFilters: Filters
@@ -221,16 +228,22 @@ export const useStore = create<AppState>((set, get) => ({
         selectedListings: null,
         loadingListings: false,
         mapFocusedListingId: null,
+        ...(next ? { layers: { ...s.layers, anjuke: true } } : {}),
       }
     }),
   setSavedMapViewActive: (active) =>
-    set({
+    set((s) => ({
       savedMapViewActive: active,
       mapFocusedListingId: null,
       ...(active
-        ? { selectedCommunity: null, selectedListings: null, loadingListings: false }
+        ? {
+            selectedCommunity: null,
+            selectedListings: null,
+            loadingListings: false,
+            layers: { ...s.layers, anjuke: true },
+          }
         : {}),
-    }),
+    })),
   toggleSavedListing: async (payload) => {
     const s = get()
     if (!s.user) {
@@ -277,11 +290,20 @@ export const useStore = create<AppState>((set, get) => ({
 
   mapFocusedListingId: null,
   setMapFocusedListingId: (id) => set({ mapFocusedListingId: id }),
+  mapFlyToNonce: 0,
+  flyToListingOnMap: (id) =>
+    set((s) => ({
+      mapFocusedListingId: id,
+      mapFlyToNonce: s.mapFlyToNonce + 1,
+    })),
   panelListingOrderIds: [],
   setPanelListingOrderIds: (ids) => set({ panelListingOrderIds: ids }),
 
   sort: 'price-asc',
   setSort: (sort) => set({ sort }),
+
+  hideOffMarket: true,
+  setHideOffMarket: (hide) => set({ hideOffMarket: hide }),
 
   appliedFilters: { ...defaultFilters },
   setFilter: (key, value) =>

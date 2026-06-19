@@ -32,6 +32,7 @@ import {
 } from '@/lib/listingFilters'
 import { communityPassesMapFilters, stopPassesMapFilters, type MapLocationFilterOpts } from '@/lib/mapQuery'
 import { resolveListingMapPosition, savedListingPositions } from '@/lib/listingMapLayout'
+import { filteredSavedListings } from '@/lib/panelListings'
 import type { Community, Stop, HeatmapBounds, ScutLocation, StreetviewIndex, StreetviewIndexEntry } from '@/lib/types'
 
 const GUANGZHOU_CENTER: L.LatLngExpression = [23.13, 113.33]
@@ -306,7 +307,7 @@ function LeafletMoveSync() {
   return null
 }
 
-/** Black star, white outline; focused state adds a white ring — DivIcon for saved listing pins. */
+/** Black star, white outline; focused state is slightly larger (no ring). */
 const savedStarIconCache = new Map<string, L.DivIcon>()
 const SAVED_STAR_FILL = '#0a0a0a'
 const SAVED_STAR_STROKE = '#ffffff'
@@ -317,11 +318,8 @@ function getSavedListingStarIcon(focused: boolean): L.DivIcon {
   if (!icon) {
     const outer = focused ? 52 : 40
     const inner = Math.max(22, outer - 14)
-    const ring = focused
-      ? 'box-shadow:0 0 0 4px #fff, 0 2px 10px rgba(0,0,0,0.5);'
-      : ''
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${inner}" height="${inner}" fill="${SAVED_STAR_FILL}" stroke="${SAVED_STAR_STROKE}" stroke-width="1.85" stroke-linejoin="round" style="display:block;filter:drop-shadow(0 0 1px rgba(255,255,255,0.9)) drop-shadow(0 2px 4px rgba(0,0,0,0.55));"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`
-    const html = `<div style="width:${outer}px;height:${outer}px;display:flex;align-items:center;justify-content:center;border-radius:50%;${ring}cursor:pointer;">${svg}</div>`
+    const html = `<div style="width:${outer}px;height:${outer}px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;">${svg}</div>`
     icon = L.divIcon({
       html,
       iconSize: [outer, outer],
@@ -340,6 +338,7 @@ function SavedListingStarMarkers({ mapFilterOpts }: { mapFilterOpts: MapLocation
   const communities = useStore((s) => s.communities)
   const appliedFilters = useStore((s) => s.appliedFilters)
   const sort = useStore((s) => s.sort)
+  const hideOffMarket = useStore((s) => s.hideOffMarket)
   const mapFocusedListingId = useStore((s) => s.mapFocusedListingId)
   const setMapFocusedListingId = useStore((s) => s.setMapFocusedListingId)
 
@@ -363,34 +362,27 @@ function SavedListingStarMarkers({ mapFilterOpts }: { mapFilterOpts: MapLocation
         mapFilterOpts,
         appliedFilters,
         sort,
+        hideOffMarket,
       ),
-    [savedListings, communities, mapFilterOpts, appliedFilters, sort],
+    [savedListings, communities, mapFilterOpts, appliedFilters, sort, hideOffMarket],
   )
-
-  const titleById = useMemo(() => {
-    const m = new Map<number, string>()
-    for (const s of savedListings) {
-      m.set(s.listing.id, s.listing.title)
-    }
-    return m
-  }, [savedListings])
 
   const visible = useMemo(() => {
     const b = bounds.pad(0.22)
-    const out: { id: number; lat: number; lng: number; title: string }[] = []
+    const out: { id: number; lat: number; lng: number }[] = []
     for (const [id, pos] of positions) {
       if (b.contains([pos.lat, pos.lng])) {
-        out.push({ id, lat: pos.lat, lng: pos.lng, title: titleById.get(id) ?? '' })
+        out.push({ id, lat: pos.lat, lng: pos.lng })
       }
     }
     return out
-  }, [positions, bounds, titleById])
+  }, [positions, bounds])
 
   if (!layers.anjuke || !savedMapViewActive) return null
 
   return (
     <>
-      {visible.map(({ id, lat, lng, title }) => (
+      {visible.map(({ id, lat, lng }) => (
         <Marker
           key={id}
           position={[lat, lng]}
@@ -402,13 +394,7 @@ function SavedListingStarMarkers({ mapFilterOpts }: { mapFilterOpts: MapLocation
               setMapFocusedListingId(id)
             },
           }}
-        >
-          {title ? (
-            <Popup>
-              <span className="text-xs max-w-[220px] block leading-snug">{title}</span>
-            </Popup>
-          ) : null}
-        </Marker>
+        />
       ))}
     </>
   )
@@ -443,26 +429,32 @@ function MapViewSnapshotSync({
 
 function MapFocusController({ mapFilterOpts }: { mapFilterOpts: MapLocationFilterOpts }) {
   const map = useMap()
-  const mapFocusedListingId = useStore((s) => s.mapFocusedListingId)
+  const mapFlyToNonce = useStore((s) => s.mapFlyToNonce)
+  const lastHandledFlyToNonce = useRef(0)
 
   useEffect(() => {
-    if (mapFocusedListingId == null) return
+    if (mapFlyToNonce === 0 || mapFlyToNonce === lastHandledFlyToNonce.current) return
+    lastHandledFlyToNonce.current = mapFlyToNonce
+
     const st = useStore.getState()
+    const listingId = st.mapFocusedListingId
+    if (listingId == null) return
     const pos = resolveListingMapPosition({
-      listingId: mapFocusedListingId,
+      listingId,
       savedMapViewActive: st.savedMapViewActive,
       savedListings: st.savedListings,
       communities: st.communities,
       mapFilterOpts,
       appliedFilters: st.appliedFilters,
       sort: st.sort,
+      hideOffMarket: st.hideOffMarket,
       selectedCommunity: st.selectedCommunity,
       panelListingIdsInOrder: st.panelListingOrderIds,
     })
     if (!pos) return
     const z = Math.max(map.getZoom(), 16)
     map.flyTo([pos.lat, pos.lng], z, { duration: 0.42, easeLinearity: 0.22 })
-  }, [map, mapFilterOpts, mapFocusedListingId])
+  }, [map, mapFilterOpts, mapFlyToNonce])
 
   return null
 }
@@ -1063,6 +1055,8 @@ export default function MapView() {
   const setListingCountDisplay = useStore((s) => s.setListingCountDisplay)
   const savedMapViewActive = useStore((s) => s.savedMapViewActive)
   const savedListings = useStore((s) => s.savedListings)
+  const hideOffMarket = useStore((s) => s.hideOffMarket)
+  const sort = useStore((s) => s.sort)
   const selectCommunity = useStore((s) => s.selectCommunity)
   const setSavedMapViewActive = useStore((s) => s.setSavedMapViewActive)
   const streetviewPmtilesUrl = `${import.meta.env.BASE_URL}data/lines_${streetviewProvider}.pmtiles`
@@ -1127,7 +1121,10 @@ export default function MapView() {
     if (streetviewModalOpen) return
 
     if (savedMapViewActive) {
-      setListingCountDisplay(savedListings.length, false)
+      setListingCountDisplay(
+        filteredSavedListings(savedListings, appliedFilters, sort, hideOffMarket).length,
+        false,
+      )
       return
     }
 
@@ -1181,7 +1178,9 @@ export default function MapView() {
     appliedFiltersKey,
     setListingCountDisplay,
     savedMapViewActive,
-    savedListings.length,
+    savedListings,
+    hideOffMarket,
+    sort,
   ])
 
   return (

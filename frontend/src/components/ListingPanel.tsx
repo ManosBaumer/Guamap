@@ -7,7 +7,7 @@ import { useStore } from "@/lib/store";
 
 import { loadListings } from "@/lib/data";
 
-import { filterAndSortListings } from "@/lib/panelListings";
+import { filterAndSortListings, filteredSavedListings as getFilteredSavedListings } from "@/lib/panelListings";
 
 import type { SortMode } from "@/lib/types";
 
@@ -51,7 +51,6 @@ const SORT_OPTIONS: { value: SortMode; label: string }[] = [
 
 export default function ListingPanel() {
   const [transitBreakdownOpen, setTransitBreakdownOpen] = useState(false);
-  const [hideOffMarket, setHideOffMarket] = useState(true);
   const communityListScrollRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -66,6 +65,8 @@ export default function ListingPanel() {
     sort,
     setSort,
     appliedFilters,
+    hideOffMarket,
+    setHideOffMarket,
 
     savedMapViewActive,
     setSavedMapViewActive,
@@ -84,6 +85,8 @@ export default function ListingPanel() {
       sort: s.sort,
       setSort: s.setSort,
       appliedFilters: s.appliedFilters,
+      hideOffMarket: s.hideOffMarket,
+      setHideOffMarket: s.setHideOffMarket,
       savedMapViewActive: s.savedMapViewActive,
       setSavedMapViewActive: s.setSavedMapViewActive,
       savedListings: s.savedListings,
@@ -137,13 +140,10 @@ export default function ListingPanel() {
     return filterAndSortListings(selectedListings, appliedFilters, sort);
   }, [selectedListings, appliedFilters, sort]);
 
-  const filteredSavedListings = useMemo(() => {
-    let listings = savedListings.map((s) => s.listing);
-    if (hideOffMarket) {
-      listings = listings.filter((l) => !l.title.includes('【已下架】'));
-    }
-    return filterAndSortListings(listings, appliedFilters, sort);
-  }, [savedListings, appliedFilters, sort, hideOffMarket]);
+  const filteredSavedListings = useMemo(
+    () => getFilteredSavedListings(savedListings, appliedFilters, sort, hideOffMarket),
+    [savedListings, appliedFilters, sort, hideOffMarket],
+  );
 
   useLayoutEffect(() => {
     if (savedMapViewActive) {

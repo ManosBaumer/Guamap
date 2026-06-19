@@ -55,8 +55,14 @@ export function savedListingPositions(
   mapFilterOpts: MapLocationFilterOpts,
   appliedFilters: Filters,
   sort: SortMode,
+  hideOffMarket: boolean,
 ): Map<number, { lat: number; lng: number }> {
-  const ordered = orderedSavedSnapshotsMatchingFilters(snapshots, appliedFilters, sort)
+  const ordered = orderedSavedSnapshotsMatchingFilters(
+    snapshots,
+    appliedFilters,
+    sort,
+    hideOffMarket,
+  )
   const byComm = new Map<string, SavedListingSnapshot[]>()
   for (const s of ordered) {
     const list = byComm.get(s.communityId) ?? []
@@ -89,6 +95,7 @@ export function resolveListingMapPosition(args: {
   mapFilterOpts: MapLocationFilterOpts
   appliedFilters: Filters
   sort: SortMode
+  hideOffMarket: boolean
   selectedCommunity: Community | null
   panelListingIdsInOrder: number[]
 }): { lat: number; lng: number } | null {
@@ -100,6 +107,7 @@ export function resolveListingMapPosition(args: {
     mapFilterOpts,
     appliedFilters,
     sort,
+    hideOffMarket,
     selectedCommunity,
     panelListingIdsInOrder,
   } = args
@@ -111,6 +119,7 @@ export function resolveListingMapPosition(args: {
       mapFilterOpts,
       appliedFilters,
       sort,
+      hideOffMarket,
     )
     return map.get(listingId) ?? null
   }
