@@ -1,3 +1,6 @@
-"""Utilities: I/O, API client, deduplication."""
-from .io import load_json, save_json, load_csv, save_csv
-from .api_client import get_with_retry, rate_limited_get
+"""Utilities: I/O, API client, deduplication, notifications.
+
+Import submodules directly, e.g. `from utils.notify import notify`.
+Avoid re-exporting heavy deps here so scrape-only installs (requirements-scrape.txt)
+do not require pandas.
+"""
