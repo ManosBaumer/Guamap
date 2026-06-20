@@ -1,14 +1,12 @@
-import FilterBar from '@/components/FilterBar'
-import LayerControl from '@/components/LayerControl'
-import MapView from '@/components/MapView'
-import ListingPanel from '@/components/ListingPanel'
-import ImageModal from '@/components/ImageModal'
-import LoginModal from '@/components/LoginModal'
 import { useEffect } from 'react'
+import MapApp from '@/components/MapApp'
+import DevDashboard from '@/pages/DevDashboard'
+import { usePathname } from '@/hooks/usePathname'
 import { useStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 
 export default function App() {
+  const pathname = usePathname()
   const setUser = useStore((s) => s.setUser)
   const setSavedListings = useStore((s) => s.setSavedListings)
   const setSavedMapViewActive = useStore((s) => s.setSavedMapViewActive)
@@ -36,29 +34,32 @@ export default function App() {
         .from('saved_listings')
         .select('*')
         .eq('user_id', userId)
-      
+
       if (!error && data) {
-        setSavedListings(data.map((row: any) => ({
-          listing: row.listing,
-          communityId: row.community_id,
-          communityName: row.community_name,
-          savedAt: row.saved_at
-        })))
+        setSavedListings(
+          data.map((row: {
+            listing: unknown
+            community_id: string
+            community_name: string
+            saved_at: string
+          }) => ({
+            listing: row.listing as Parameters<typeof setSavedListings>[0][number]['listing'],
+            communityId: row.community_id,
+            communityName: row.community_name,
+            savedAt: row.saved_at,
+          })),
+        )
       }
     }
 
     return () => subscription.unsubscribe()
-  }, [])
-  return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden">
-      <LoginModal />
-      <FilterBar />
-      <div className="flex flex-1 min-h-0">
-        <LayerControl />
-        <MapView />
-        <ListingPanel />
-      </div>
-      <ImageModal />
-    </div>
-  )
+  }, [setSavedListings, setSavedMapViewActive, setUser])
+
+  const isDevRoute = pathname === '/dev' || pathname === '/dev/'
+
+  if (isDevRoute) {
+    return <DevDashboard />
+  }
+
+  return <MapApp />
 }

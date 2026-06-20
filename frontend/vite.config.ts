@@ -4,6 +4,7 @@ import type { Connect } from 'vite'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { anjukeRefreshApiPlugin } from './server/anjukeRefreshHandler'
 import { handleTransitRouteRequest } from './server/transitRouteHandler'
 
 /** Personal favourites: `data/saved_listings.json` (gitignored). Served only by dev/preview. */
@@ -107,7 +108,13 @@ export default defineConfig(({ mode }) => {
   const amapKey = env.AMAP_KEY ?? process.env.AMAP_KEY ?? ''
 
   return {
-  plugins: [react(), tailwindcss(), savedListingsFilePlugin(), transitRouteApiPlugin(amapKey)],
+  plugins: [
+    react(),
+    tailwindcss(),
+    savedListingsFilePlugin(),
+    transitRouteApiPlugin(amapKey),
+    anjukeRefreshApiPlugin(),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

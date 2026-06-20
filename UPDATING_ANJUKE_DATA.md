@@ -1,86 +1,81 @@
 # Updating Anjuke Data Pipeline
 
-This document outlines the step-by-step process for performing an incremental update of the Anjuke housing listings. The pipeline is specifically designed to safely add new properties, remove sold properties, and preserve your personal saved/bookmarked listings (by tagging them as `【已下架】` instead of permanently deleting them).
+Incremental refresh for Guangzhou rental communities and listings. **No transit recalculation** — the transit planner handles routing live.
 
 ---
 
-### Step 1: Extract a Fresh Cookie
+## Quick start (recommended)
 
-Anjuke heavily relies on session cookies and security tokens. Before you run the scraper, you must grab a fresh browser cookie to avoid getting blocked or encountering a 403 Forbidden error.
+### Option A — Dev dashboard (local)
 
-1. Open your web browser and navigate to **Guangzhou Anjuke** (or perform a search on their site).
-2. Right-click anywhere on the page and select **Inspect** to open the Chrome/Edge Developer Tools.
-3. Go to the **Network** tab. 
-4. Refresh the page (F5).
-5. Look for the primary HTML document request (usually the very first item, often named `guangzhou.anjuke.com` or similar). Click on it.
-6. Scroll down to the **Request Headers** section and look for the `cookie:` field.
-7. Right-click the cookie value and select **Copy Value**.
+1. Run `npm run dev` in `frontend/`.
+2. Sign in and open **Listing refresh** (wrench icon → `/dev`).
+3. Paste a fresh Anjuke cookie → **Test cookie** → **Start refresh**.
+4. Keep the dev server running until logs show success (often 1–3 hours).
 
----
+### Option B — GitHub Actions (free cloud, overnight)
 
-### Step 2: Update the Scraper
+1. Open [Actions → Refresh Anjuke listings](https://github.com/ManosBaumer/Guamap/actions/workflows/refresh-anjuke.yml).
+2. **Run workflow** and paste your cookie when prompted.
+3. When finished, the workflow commits updated `frontend/public/data/` to the repo.
+4. Pull the latest commit on your machine (or redeploy).
 
-1. Open `data/scraping/main.py` in your code editor.
-2. Locate the `RAW_COOKIE` variable near the top of the file.
-3. Replace the string with the massive cookie string you just copied:
-   ```python
-   RAW_COOKIE = "your_new_massive_cookie_string_goes_here"
-   ```
+Raw scrape files are cached between workflow runs (not committed). First cloud run may take longer if the cache is empty.
 
----
+### Option C — CLI
 
-### Step 3: Run the Incremental Scraper
+```bash
+# From repo root
+pip install -r requirements-scrape.txt
 
-The core scraping logic has been optimized to perform **delta updates**. This means it cross-references the live market against your existing files to avoid redundant API calls and prevent memory crashes.
+# Test cookie only
+ANJUKE_COOKIE='...' python scripts/refresh_anjuke_listings.py --test-cookie-only
 
-1. Open your terminal in the root directory (`guamap/`).
-2. Run the main scraper:
-   ```bash
-   python data/scraping/main.py
-   ```
-3. **What it does:**
-   - It automatically parses your raw cookie string into the necessary headers.
-   - It performs a session ping to verify authentication.
-   - It scrapes all communities and then iterates through all active listings.
-   - It creates a backup of your old dataset (`anjuke_listings_raw.jsonl.bak`).
-   - It saves the fresh listings to `anjuke_listings_raw.jsonl`.
+# Full refresh
+ANJUKE_COOKIE='...' python scripts/refresh_anjuke_listings.py
+
+# Re-export frontend JSON from existing raw files (no scrape)
+python scripts/refresh_anjuke_listings.py --prepare-only
+```
 
 ---
 
-### Step 4: Calculate Transit Times (If Necessary)
+## Step 1: Extract a fresh cookie
 
-If the scraper found brand new communities that were not in your database before, you need to calculate their transit times to the university. *This script is smart enough to skip communities that already have calculated transit times, saving you API calls.*
+1. Open **https://gz.zu.anjuke.com/ditu/** in Chrome/Edge.
+2. DevTools → **Network** → refresh the page.
+3. Click the document request → **Request Headers** → copy the full `cookie:` value.
 
-1. Run the transit script:
-   ```bash
-   python data/scraping/transit.py
-   ```
-   *(Ensure your `AMAP_KEY` is safely located in your project's `.env` file).*
+Cookies expire quickly; always test before a long run.
 
 ---
 
-### Step 5: Prepare the Frontend Data
+## What the refresh does
 
-Once the raw data is completely scraped and geolocated, you must format it for the React frontend. This script aggregates the data, drops broken listings, generates the heatmaps, and handles your personal saved listings.
+| Step | Output |
+|------|--------|
+| Scrape communities + active listings | `data/anjuke_communities.json`, `data/anjuke_listings_raw.jsonl` |
+| Detect removed listings | Appends to `data/anjuke_off_market.jsonl`, tags titles with `【已下架】` |
+| Tag saved favourites | Updates `data/saved_listings.json` for delisted items |
+| Export for React map | `frontend/public/data/communities.json`, `listings/*.json`, `listings_metadata.json` |
 
-1. Run the preparation script:
-   ```bash
-   python scripts/prepare_frontend_data.py
-   ```
-2. **What it does:**
-   - Converts coordinates from Baidu (bd09) to GPS standard (WGS84).
-   - Generates the updated heatmap clusters using pandas/matplotlib.
-   - Checks your `saved_listings.json` file against the live market. If any of your saved listings were sold or taken down, it secretly adds `【已下架】` to their title instead of deleting them.
-   - Outputs the final, minified JSON files directly into `frontend/public/data/`.
+**Skipped:** `data/scraping/transit.py`, heatmaps, stop refresh, Amap batch routing.
 
 ---
 
-### Step 6: Verify the Update
+## Legacy manual flow
 
-1. Restart your frontend server if it isn't running:
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-2. Open the web app. Check the listing counts in the sidebar to confirm the active listings number has refreshed.
-3. Check your Saved Favourites. You can use your new "Available only" filter to seamlessly toggle the visibility of any listings that went off-market during this update!
+The old entry point `data/scraping/main.py` (gitignored, cookie hardcoded) is replaced by:
+
+- `data_collection/anjuke/scraper.py` — committed scraper module
+- `scripts/refresh_anjuke_listings.py` — orchestrator
+
+You can still paste a cookie into `data/scraping/main.py` locally if needed, but prefer the dashboard or CLI above.
+
+---
+
+## Verify
+
+1. Restart or reload the frontend after a successful run.
+2. Check community/listing counts on the map.
+3. Open **Saved** favourites — delisted items show a **Sold** badge; use **Available only** to hide them.

@@ -16,6 +16,17 @@ from config import ANJUKE_COORD_SYSTEM
 from utils.coord_transform import gcj02_to_wgs84, anjuke_raw_to_wgs84
 
 try:
+    from anjuke_off_market import tag_off_market_title
+except ImportError:
+    OFF_MARKET_TAG = "【已下架】"
+
+    def tag_off_market_title(title: str) -> str:
+        title = (title or "").strip()
+        if OFF_MARKET_TAG in title:
+            return title
+        return f"{OFF_MARKET_TAG}{title}" if title else OFF_MARKET_TAG
+
+try:
     from pypinyin import pinyin, Style as PinyinStyle
     _HAS_PYPINYIN = True
 except ImportError:
@@ -151,6 +162,42 @@ def prepare_anjuke():
         except json.JSONDecodeError:
             pass
 
+    active_ids: set[str] = set()
+
+    def append_listing_row(li: dict, *, force_off_market: bool = False) -> None:
+        cname = li.get("community_name", "")
+        comm = name_to_comm.get(cname)
+        if not comm:
+            return
+        lid = str(li.get("id", ""))
+        if lid and not force_off_market:
+            active_ids.add(lid)
+        imgs = [ajk_img_hash(u) for u in (li.get("prop_images") or [])[:8] if u]
+        imgs = [h for h in imgs if h]
+        des = re.sub(r"<br\s*/?>", " ", str(li.get("des", "") or "")).replace("\n", " ").strip()[:300]
+        rooms = li.get("rhval", "")
+        title = str(li.get("title", "") or "")
+        if force_off_market:
+            title = tag_off_market_title(title)
+        bedroom_count, bathroom_count = _parse_bedroom_bathroom(rooms, des, title)
+
+        comm["listings"].append({
+            "id": li.get("id"),
+            "title": title,
+            "price": li.get("price", 0),
+            "area": li.get("area", ""),
+            "orient": li.get("orient", ""),
+            "rentType": li.get("rent_type_name", ""),
+            "rooms": rooms,
+            "roomCount": bedroom_count,
+            "bathroomCount": bathroom_count,
+            "des": des,
+            "metro": li.get("metro_info", ""),
+            "floor": li.get("floor_des", ""),
+            "imgHashes": imgs,
+            "amenities": amenities_cache.get(str(li.get("id")), []),
+        })
+
     with open(listings_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -160,33 +207,25 @@ def prepare_anjuke():
                 li = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            cname = li.get("community_name", "")
-            comm = name_to_comm.get(cname)
-            if not comm:
-                continue
-            imgs = [ajk_img_hash(u) for u in (li.get("prop_images") or [])[:8] if u]
-            imgs = [h for h in imgs if h]
-            des = re.sub(r"<br\s*/?>", " ", str(li.get("des", "") or "")).replace("\n", " ").strip()[:300]
-            rooms = li.get("rhval", "")
-            title = str(li.get("title", "") or "")
-            bedroom_count, bathroom_count = _parse_bedroom_bathroom(rooms, des, title)
+            append_listing_row(li)
 
-            comm["listings"].append({
-                "id": li.get("id"),
-                "title": li.get("title", ""),
-                "price": li.get("price", 0),
-                "area": li.get("area", ""),
-                "orient": li.get("orient", ""),
-                "rentType": li.get("rent_type_name", ""),
-                "rooms": rooms,
-                "roomCount": bedroom_count,
-                "bathroomCount": bathroom_count,
-                "des": des,
-                "metro": li.get("metro_info", ""),
-                "floor": li.get("floor_des", ""),
-                "imgHashes": imgs,
-                "amenities": amenities_cache.get(str(li.get("id")), []),
-            })
+    off_market_path = DATA / "anjuke_off_market.jsonl"
+    off_market_ids: set[str] = set()
+    if off_market_path.exists():
+        with open(off_market_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    li = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                lid = str(li.get("id", ""))
+                if not lid or lid in active_ids:
+                    continue
+                off_market_ids.add(lid)
+                append_listing_row(li, force_off_market=True)
 
     listings_dir = OUT / "listings"
     listings_dir.mkdir(parents=True, exist_ok=True)
@@ -233,8 +272,19 @@ def prepare_anjuke():
     
     meta_file = OUT / "listings_metadata.json"
     meta_file.write_text(json.dumps(index_metadata, separators=(",", ":")), encoding="utf-8")
-    
+
+    valid_community_ids = {comm["id"] for comm in index}
+    removed_files = 0
+    for stale in listings_dir.glob("*.json"):
+        if stale.stem not in valid_community_ids:
+            stale.unlink()
+            removed_files += 1
+
     print(f"  Anjuke: {len(index)} communities, {total_listings} listings (coords {coord_sys} -> WGS84)")
+    if off_market_ids:
+        print(f"  Off-market listings included: {len(off_market_ids)}")
+    if removed_files:
+        print(f"  Removed stale listing files: {removed_files}")
     print(f"  Index: {index_file.stat().st_size / 1024:.0f} KB")
     print(f"  Metadata: {meta_file.stat().st_size / 1024:.0f} KB")
 

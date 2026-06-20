@@ -1,4 +1,4 @@
-import { ChevronDown, Star, Compass, DollarSign, Home, TrainFront, SlidersHorizontal, Ruler, Bed, Bath, Sofa, Calendar, User, LogOut, X, Sparkles, Route } from 'lucide-react'
+import { ChevronDown, Star, Compass, DollarSign, Home, TrainFront, SlidersHorizontal, Ruler, Bed, Bath, Sofa, Calendar, User, LogOut, X, Sparkles, Route, Wrench } from 'lucide-react'
 import NumberFlow from '@number-flow/react'
 import { useShallow } from 'zustand/react/shallow'
 import { supabase } from '@/lib/supabase'
@@ -6,6 +6,8 @@ import { useStore } from '@/lib/store'
 import type { Filters } from '@/lib/types'
 import { METRO_LINE_OPTIONS, sortMetroSelection } from '@/lib/metroFilterOptions'
 import { listingFiltersAreActive } from '@/lib/listingFilters'
+import { isDevAdmin } from '@/lib/devAccess'
+import { navigateTo } from '@/hooks/usePathname'
 import {
   useState,
   useRef,
@@ -907,6 +909,17 @@ export default function FilterBar() {
             </span>
           )}
         </button>
+
+        {isDevAdmin(user) && (
+          <button
+            type="button"
+            onClick={() => navigateTo('/dev')}
+            className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 hover:bg-gray-100"
+            title="Listing refresh"
+          >
+            <Wrench className="w-5 h-5 text-[var(--color-text)]" />
+          </button>
+        )}
 
         <button
           type="button"
