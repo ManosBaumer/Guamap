@@ -11,6 +11,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import LoginModal from '@/components/LoginModal'
+import { canUseLocalAnjukeRefresh, devAnjukeRefreshApiUrl, fetchDevJson } from '@/lib/devApi'
 import { isDevAdmin } from '@/lib/devAccess'
 import { navigateTo } from '@/hooks/usePathname'
 import { supabase } from '@/lib/supabase'
@@ -31,6 +32,7 @@ export default function DevDashboard() {
   const user = useStore((s) => s.user)
   const setAuthModalOpen = useStore((s) => s.setAuthModalOpen)
   const allowed = isDevAdmin(user)
+  const localRefresh = canUseLocalAnjukeRefresh()
 
   const [cookie, setCookie] = useState(() => sessionStorage.getItem(COOKIE_STORAGE_KEY) ?? '')
   const [job, setJob] = useState<RefreshJobState | null>(null)
@@ -51,22 +53,16 @@ export default function DevDashboard() {
   }, [cookie])
 
   const pollStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/dev/anjuke-refresh/status')
-      if (!res.ok) return
-      const body = (await res.json()) as RefreshJobState
-      setJob(body)
-    } catch {
-      /* ignore while dev server unavailable */
-    }
+    const result = await fetchDevJson<RefreshJobState>(devAnjukeRefreshApiUrl('/status'))
+    if (result.data) setJob(result.data)
   }, [])
 
   useEffect(() => {
-    if (!allowed) return
+    if (!allowed || !localRefresh) return
     void pollStatus()
     const id = window.setInterval(() => void pollStatus(), 2000)
     return () => window.clearInterval(id)
-  }, [allowed, pollStatus])
+  }, [allowed, localRefresh, pollStatus])
 
   useEffect(() => {
     if (logRef.current) {
@@ -79,14 +75,21 @@ export default function DevDashboard() {
     setTestMessage(null)
     setTestOk(null)
     try {
-      const res = await fetch('/api/dev/anjuke-refresh/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie }),
-      })
-      const body = (await res.json()) as { ok: boolean; message: string }
-      setTestOk(body.ok)
-      setTestMessage(body.message)
+      const result = await fetchDevJson<{ ok: boolean; message: string }>(
+        devAnjukeRefreshApiUrl('/test'),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookie }),
+        },
+      )
+      if (result.error || !result.data) {
+        setTestOk(false)
+        setTestMessage(result.error ?? 'Test failed')
+        return
+      }
+      setTestOk(result.data.ok)
+      setTestMessage(result.data.message)
     } catch (e) {
       setTestOk(false)
       setTestMessage(e instanceof Error ? e.message : 'Test failed')
@@ -99,15 +102,17 @@ export default function DevDashboard() {
     setBusy(true)
     setTestMessage(null)
     try {
-      const res = await fetch('/api/dev/anjuke-refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie }),
-      })
-      const body = (await res.json()) as { started?: boolean; error?: string }
-      if (!res.ok) {
+      const result = await fetchDevJson<{ started?: boolean; error?: string }>(
+        devAnjukeRefreshApiUrl(),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookie }),
+        },
+      )
+      if (result.error || !result.ok) {
         setTestOk(false)
-        setTestMessage(body.error ?? `HTTP ${res.status}`)
+        setTestMessage(result.error ?? result.data?.error ?? `HTTP ${result.status}`)
         return
       }
       await pollStatus()
@@ -179,11 +184,42 @@ export default function DevDashboard() {
               <p className="text-sm text-gray-500 leading-relaxed">
                 Incremental Anjuke scrape → mark removed listings as sold → update{' '}
                 <code className="text-xs bg-gray-100 px-1 rounded">frontend/public/data</code>. No transit
-                recalculation. Runs locally via the dev server (keep this tab open; can take 1–3 hours).
+                recalculation.
               </p>
             </section>
 
+            {!localRefresh && (
+              <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-2">
+                <h2 className="text-sm font-semibold text-amber-900">
+                  Deployed site — local refresh unavailable
+                </h2>
+                <p className="text-sm text-amber-900/90 leading-relaxed">
+                  <a
+                    href="https://guamap.netlify.app/"
+                    className="underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    guamap.netlify.app
+                  </a>{' '}
+                  is static hosting: it serves the map only. There is no Python scraper or{' '}
+                  <code className="text-xs bg-amber-100/80 px-1 rounded">/api/dev/…</code> backend here
+                  (Netlify returns the app HTML for every path).
+                </p>
+                <p className="text-sm text-amber-900/90 leading-relaxed">
+                  To refresh listings, use <strong>GitHub Actions</strong> below, or run{' '}
+                  <code className="text-xs bg-amber-100/80 px-1 rounded">cd frontend && npm run dev</code>{' '}
+                  on your PC and open <code className="text-xs bg-amber-100/80 px-1 rounded">/dev</code>{' '}
+                  there.
+                </p>
+              </section>
+            )}
+
+            {localRefresh && (
             <section className="rounded-2xl border border-[var(--color-border)] bg-white p-5 space-y-4">
+              <p className="text-xs text-gray-500">
+                Local mode: keep this tab open while the dev server runs (can take 1–3 hours).
+              </p>
               <div>
                 <label htmlFor="anjuke-cookie" className="block text-sm font-semibold mb-1.5">
                   Anjuke cookie
@@ -261,11 +297,14 @@ export default function DevDashboard() {
                 </pre>
               )}
             </section>
+            )}
 
             <section className="rounded-2xl border border-[var(--color-border)] bg-white p-5 space-y-3">
               <div className="flex items-center gap-2">
                 <Cloud className="w-4 h-4 text-gray-500" aria-hidden />
-                <h2 className="text-sm font-semibold">Run overnight in the cloud (free)</h2>
+                <h2 className="text-sm font-semibold">
+                  {localRefresh ? 'Run overnight in the cloud (free)' : 'Refresh on Netlify — use GitHub Actions'}
+                </h2>
               </div>
               <p className="text-sm text-gray-600 leading-relaxed">
                 Use GitHub Actions: Actions → <strong>Refresh Anjuke listings</strong> → Run workflow.

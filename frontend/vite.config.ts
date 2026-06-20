@@ -109,11 +109,11 @@ export default defineConfig(({ mode }) => {
 
   return {
   plugins: [
+    anjukeRefreshApiPlugin(),
     react(),
     tailwindcss(),
     savedListingsFilePlugin(),
     transitRouteApiPlugin(amapKey),
-    anjukeRefreshApiPlugin(),
   ],
   resolve: {
     alias: {

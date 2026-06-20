@@ -214,25 +214,27 @@ export async function handleAnjukeRefreshRequest(
   res.end()
 }
 
-export function anjukeRefreshApiMiddleware(): Connect.NextHandleFunction {
-  return (req, res, next) => {
-    const url = req.url?.split('?')[0] ?? ''
-    if (!url.startsWith('/api/dev/anjuke-refresh')) {
-      next()
-      return
-    }
-    void handleAnjukeRefreshRequest(req, res, url)
-  }
+function mountAnjukeRefreshApi(server: { middlewares: Connect.Server }) {
+  // Path-prefix mount runs before Vite's SPA fallback (which would return index.html).
+  server.middlewares.use('/api/dev/anjuke-refresh', (req, res) => {
+    const suffix = req.url?.split('?')[0] ?? ''
+    const pathname =
+      suffix === '/' || suffix === ''
+        ? '/api/dev/anjuke-refresh'
+        : `/api/dev/anjuke-refresh${suffix}`
+    void handleAnjukeRefreshRequest(req, res, pathname)
+  })
 }
 
 export function anjukeRefreshApiPlugin() {
   return {
     name: 'guamap-anjuke-refresh-api',
+    enforce: 'pre' as const,
     configureServer(server: { middlewares: Connect.Server }) {
-      server.middlewares.use(anjukeRefreshApiMiddleware())
+      mountAnjukeRefreshApi(server)
     },
     configurePreviewServer(server: { middlewares: Connect.Server }) {
-      server.middlewares.use(anjukeRefreshApiMiddleware())
+      mountAnjukeRefreshApi(server)
     },
   }
 }
