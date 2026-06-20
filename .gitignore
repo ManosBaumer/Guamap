@@ -1,0 +1,53 @@
+# --- Put this file in the folder where you ran `git init` (repo root) ---
+
+# Data and cache (keep .gitkeep)
+data/*
+!data/.gitkeep
+!data/transit_route_cache/
+data/transit_route_cache/*
+!data/transit_route_cache/.gitkeep
+
+# Frontend (Vite / Node)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/*.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# TypeScript build info (local)
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.env
+.env.local
+.env.*.local
+.venv
+venv/
+*.egg-info/
+.eggs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Optional: Cursor local state (uncomment if you don’t want it in the repo)
+# .cursor/
+
+# Tooling and temp
+.claude/
+.tmp_pkg/
+*.dist-info/
+*.egg-info/
+

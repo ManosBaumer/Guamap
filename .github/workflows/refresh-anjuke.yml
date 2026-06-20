@@ -1,0 +1,166 @@
+name: Refresh Anjuke listings
+
+
+
+on:
+
+  workflow_dispatch:
+
+    inputs:
+
+      anjuke_cookie:
+
+        description: Anjuke browser cookie (optional if ANJUKE_COOKIE repo secret is set)
+
+        required: false
+
+        type: string
+
+
+
+permissions:
+
+  contents: write
+
+
+
+jobs:
+
+  refresh:
+
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 360
+
+
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+        with:
+
+          fetch-depth: 0
+
+
+
+      - name: Configure git
+
+        run: |
+
+          git config user.name "github-actions[bot]"
+
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+
+
+      - name: Restore scrape progress from branch
+
+        run: |
+
+          git fetch origin anjuke-scrape-cache 2>/dev/null || echo "No progress branch yet (first run)."
+
+          if git rev-parse --verify origin/anjuke-scrape-cache >/dev/null 2>&1; then
+
+            git checkout origin/anjuke-scrape-cache -- data/
+
+            echo "Restored data/ from branch anjuke-scrape-cache"
+
+          fi
+
+          mkdir -p data/scraping
+
+
+
+      - uses: actions/setup-python@v5
+
+        with:
+
+          python-version: '3.11'
+
+          cache: pip
+
+          cache-dependency-path: requirements-scrape.txt
+
+
+
+      - name: Install Python dependencies
+
+        run: pip install -r requirements-scrape.txt
+
+
+
+      - name: Refresh Anjuke data (no transit)
+
+        env:
+
+          ANJUKE_COOKIE: ${{ inputs.anjuke_cookie || secrets.ANJUKE_COOKIE }}
+
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+
+          GUAMAP_PROGRESS_EVERY: "25"
+          PYTHONUNBUFFERED: "1"
+
+        run: |
+
+          if [ -z "$ANJUKE_COOKIE" ]; then
+
+            echo "Set workflow input anjuke_cookie or repository secret ANJUKE_COOKIE"
+
+            exit 1
+
+          fi
+
+          python scripts/refresh_anjuke_listings.py
+
+
+
+      - name: Notify on workflow failure
+
+        if: failure()
+
+        env:
+
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+
+        run: |
+
+          python -c "from utils.notify import notify; notify('GitHub Actions refresh failed', 'Progress is on branch anjuke-scrape-cache. Auto-retry will start in ~1 min (up to 20 times).', level='error')"
+
+
+
+      - name: Commit updated frontend data
+
+        run: |
+
+          git add frontend/public/data/
+
+          if git diff --staged --quiet; then
+
+            echo "No frontend data changes to commit."
+
+            exit 0
+
+          fi
+
+          git commit -m "chore: refresh Anjuke listings"
+
+          git push
+
+
