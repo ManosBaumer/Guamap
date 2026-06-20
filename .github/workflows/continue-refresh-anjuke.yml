@@ -1,0 +1,89 @@
+name: Continue Anjuke refresh (auto-retry)
+
+# Re-dispatches the main refresh workflow after timeout/failure (up to GUAMAP_MAX_AUTO_RETRIES).
+on:
+  workflow_run:
+    workflows: ["Refresh Anjuke listings"]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  auto-retry:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Restore progress branch (retry counter)
+        run: |
+          git fetch origin anjuke-scrape-cache 2>/dev/null || true
+          if git rev-parse --verify origin/anjuke-scrape-cache >/dev/null 2>&1; then
+            git checkout origin/anjuke-scrape-cache -- data/scraping/gha_retry_count 2>/dev/null || true
+          fi
+          mkdir -p data/scraping
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-scrape.txt
+
+      - name: Bump retry counter and check limit
+        id: retry
+        env:
+          GUAMAP_MAX_AUTO_RETRIES: "20"
+        run: |
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, ".")
+          from utils.github_progress import bump_retry_count, get_retry_count, _max_auto_retries
+          before = get_retry_count()
+          new_count, may_retry = bump_retry_count()
+          max_r = _max_auto_retries()
+          print(f"Retry count: {before} -> {new_count} (max {max_r})")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"may_retry={'true' if may_retry else 'false'}\n")
+              f.write(f"retry_count={new_count}\n")
+              f.write(f"max_retries={max_r}\n")
+          PY
+
+      - name: Notify max retries reached
+        if: steps.retry.outputs.may_retry != 'true'
+        env:
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+        run: |
+          python -c "from utils.notify import notify; notify('Auto-retry stopped', 'Max retries (${{ steps.retry.outputs.max_retries }}) reached. Update ANJUKE_COOKIE if needed, then run the workflow manually.', level='error')"
+
+      - name: Wait before retry
+        if: steps.retry.outputs.may_retry == 'true'
+        run: sleep 60
+
+      - name: Re-run refresh workflow
+        if: steps.retry.outputs.may_retry == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const n = ${{ steps.retry.outputs.retry_count }};
+            core.info(`Dispatching refresh (auto-retry ${n})…`);
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'refresh-anjuke.yml',
+              ref: 'main',
+            });

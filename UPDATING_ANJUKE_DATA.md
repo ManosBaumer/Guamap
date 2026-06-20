@@ -20,7 +20,7 @@ Incremental refresh for Guangzhou rental communities and listings. **No transit 
 3. When finished, the workflow commits updated `frontend/public/data/` to the repo.
 4. Pull the latest commit on your machine (or redeploy).
 
-Raw scrape files are cached between workflow runs (not committed). First cloud run may take longer if the cache is empty.
+Raw scrape progress is saved **during the run** on branch `anjuke-scrape-cache` (every ~25 communities). On timeout/failure, workflow **Continue Anjuke refresh** auto-starts another run after ~1 minute (max **20** retries). When a run finishes fully, it commits `frontend/public/data/` to `main` and resets the retry counter.
 
 ### Email notifications
 

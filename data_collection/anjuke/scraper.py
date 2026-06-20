@@ -11,12 +11,17 @@ import hashlib
 import json
 import os
 import re
+import sys
 import time
 from pathlib import Path
 
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from utils.github_progress import maybe_push_github_progress, push_scrape_progress
 DATA_DIR = ROOT / "data"
 SCRAPING_DIR = DATA_DIR / "scraping"
 
@@ -216,6 +221,7 @@ def fetch_blocks(base_params: dict):
         time.sleep(0.3)
 
     save_json(BLOCKS_CACHE, all_blocks)
+    push_scrape_progress("blocks fetched")
     return all_blocks
 
 
@@ -311,10 +317,14 @@ def fetch_communities(all_blocks: dict, base_params: dict):
                 },
             )
             print(f"    [{block['name']}] +{block_new} new ({len(all_communities)} total)")
+            maybe_push_github_progress(
+                f"communities progress ({len(completed_blocks)} blocks done)",
+            )
 
     state["_completed"] = True
     save_json(COMMUNITIES_STATE, state)
     save_json(COMMUNITIES_CACHE, all_communities)
+    push_scrape_progress(f"communities complete ({len(all_communities)} total)")
     return all_communities
 
 
@@ -439,6 +449,9 @@ def fetch_all_listings(all_communities: dict, base_params: dict) -> int:
         fetched_communities.add(cid)
         save_json(LISTINGS_STATE, {"fetched_communities": list(fetched_communities)})
         print(f"    saved {len(community_listings)} listings (running total: ~{total_saved})")
+        maybe_push_github_progress(
+            f"listings progress ({len(fetched_communities)}/{total_communities} communities)",
+        )
 
     bak_file = Path(str(LISTINGS_FILE) + ".bak")
     if LISTINGS_FILE.exists():
@@ -454,6 +467,7 @@ def fetch_all_listings(all_communities: dict, base_params: dict) -> int:
     if COMMUNITIES_STATE.exists():
         COMMUNITIES_STATE.unlink()
 
+    push_scrape_progress(f"listings scrape complete (~{total_saved} rows in new file)")
     return total_saved
 
 

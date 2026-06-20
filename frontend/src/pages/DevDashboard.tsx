@@ -270,10 +270,13 @@ export default function DevDashboard() {
               <p className="text-sm text-gray-600 leading-relaxed">
                 Use GitHub Actions: Actions → <strong>Refresh Anjuke listings</strong> → Run workflow.
                 Paste your cookie, or set repository secret{' '}
-                <code className="text-xs bg-gray-100 px-1 rounded">ANJUKE_COOKIE</code>. Raw scrape cache
-                is restored between runs; updated{' '}
+                <code className="text-xs bg-gray-100 px-1 rounded">ANJUKE_COOKIE</code>. Scrape progress
+                is pushed to branch{' '}
+                <code className="text-xs bg-gray-100 px-1 rounded">anjuke-scrape-cache</code> every ~25
+                communities. On failure/timeout it <strong>auto-retries</strong> after ~1 min (up to 20
+                times). Updated{' '}
                 <code className="text-xs bg-gray-100 px-1 rounded">frontend/public/data</code> is committed
-                automatically. Free tier: ~2,000 minutes/month.
+                to main when a run completes. Free tier: ~2,000 minutes/month.
               </p>
               <a
                 href="https://github.com/ManosBaumer/Guamap/actions/workflows/refresh-anjuke.yml"

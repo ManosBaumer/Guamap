@@ -32,6 +32,7 @@ load_dotenv(ROOT / ".env")
 from data_collection.anjuke import run_scrape, test_cookie
 from anjuke_off_market import sync_off_market_after_scrape
 from prepare_frontend_data import prepare_anjuke
+from utils.github_progress import reset_retry_count
 from utils.notify import notify, notify_exception
 
 
@@ -73,6 +74,8 @@ def run_refresh(cookie: str, *, skip_prepare: bool) -> None:
     print("\n=== Preparing frontend data ===")
     prepare_anjuke()
     print("\nAll done.")
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        reset_retry_count()
     notify(
         "Refresh complete",
         f"Active: {stats.active_count}, removed: {stats.newly_removed}, scraped rows: {total}",
