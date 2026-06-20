@@ -107,6 +107,7 @@ jobs:
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
 
           GUAMAP_PROGRESS_EVERY: "25"
+          PYTHONUNBUFFERED: "1"
 
         run: |
 

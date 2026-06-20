@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PROGRESS_BRANCH = "anjuke-scrape-cache"
+PROGRESS_REF = f"refs/heads/{PROGRESS_BRANCH}"
 RETRY_COUNT_FILE = ROOT / "data" / "scraping" / "gha_retry_count"
 
 # Paths written during scrape (only existing files are added).
@@ -106,7 +107,7 @@ def push_scrape_progress(message: str) -> bool:
         else:
             commit = _run(["git", "commit-tree", tree, "-m", message]).stdout.strip()
 
-        _run(["git", "push", "origin", f"{commit}:{PROGRESS_BRANCH}"])
+        _run(["git", "push", "origin", f"{commit}:{PROGRESS_REF}"])
         _run(["git", "reset", "HEAD"], check=False)
         print(f"[github] pushed progress → {PROGRESS_BRANCH}: {message}")
         return True
