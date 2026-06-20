@@ -84,3 +84,9 @@ export function recommendedGcjOverscanPadPx(map: L.Map, opts?: { slack?: number;
   const shift = Math.max(Math.abs(dx), Math.abs(dy))
   return Math.min(maxPad, Math.max(minPad, Math.ceil(shift + slack)))
 }
+
+/**
+ * Fixed gutter for the main map — large enough at max zoom in Guangzhou without resizing
+ * the Leaflet root on each zoom step (dynamic pad + invalidateSize causes tile reload flashes).
+ */
+export const GCJ_MAP_OVERSCAN_PAD_PX = 560

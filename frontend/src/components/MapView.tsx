@@ -8,11 +8,14 @@ import {
   startTransition,
   type MutableRefObject,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON, ImageOverlay, Polygon, Pane, useMap } from 'react-leaflet'
+import { Plus, Minus } from 'lucide-react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useStore } from '@/lib/store'
-import { gcjBasemapShiftLayerPixels, recommendedGcjOverscanPadPx } from '@/lib/gcj'
+import { gcjBasemapShiftLayerPixels, GCJ_MAP_OVERSCAN_PAD_PX } from '@/lib/gcj'
+import { LeafletTunedWheelZoom } from '@/lib/leafletWheelZoom'
 import StreetviewModal from '@/components/StreetviewModal'
 import CommunityListingCountsCanvas, { type CommunityCountCanvasItem } from '@/components/CommunityListingCountsCanvas'
 import TransitStopsCanvas from '@/components/TransitStopsCanvas'
@@ -36,6 +39,8 @@ import { filteredSavedListings } from '@/lib/panelListings'
 import type { Community, Stop, HeatmapBounds, ScutLocation, StreetviewIndex, StreetviewIndexEntry } from '@/lib/types'
 
 const GUANGZHOU_CENTER: L.LatLngExpression = [23.13, 113.33]
+/** z19 tiles are often missing in Guangzhou — cap user zoom below that. */
+const MAP_MAX_ZOOM = 18
 const TIME_COLORS = ['#00cc00', '#00cc00', '#ffff00', '#ff8800', '#ff0000']
 const TIME_ANCHORS = [0, 45, 58, 70, 80]
 
@@ -120,37 +125,63 @@ const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright
 function basemapConfig(
   baseMapOn: boolean,
   style: BaseMapStyle,
-): { key: string; url: string; attribution: string; maxZoom?: number } {
+): {
+  key: string
+  url: string
+  attribution: string
+  maxZoom?: number
+  maxNativeZoom?: number
+} {
   if (!baseMapOn) {
-    return { key: 'std-osm', url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION }
+    return {
+      key: 'std-osm',
+      url: OSM_TILE_URL,
+      attribution: OSM_ATTRIBUTION,
+      maxNativeZoom: MAP_MAX_ZOOM,
+      maxZoom: MAP_MAX_ZOOM,
+    }
   }
   switch (style) {
     case 'grayscale':
-      return { key: 'gray-osm', url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION }
+      return {
+        key: 'gray-osm',
+        url: OSM_TILE_URL,
+        attribution: OSM_ATTRIBUTION,
+        maxNativeZoom: MAP_MAX_ZOOM,
+        maxZoom: MAP_MAX_ZOOM,
+      }
     case 'satellite':
       return {
         key: 'esri-sat',
         url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         attribution:
           'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+        maxNativeZoom: MAP_MAX_ZOOM,
+        maxZoom: MAP_MAX_ZOOM,
       }
     case 'dark':
       return {
         key: 'carto-dark',
         url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxNativeZoom: MAP_MAX_ZOOM,
+        maxZoom: MAP_MAX_ZOOM,
       }
     case 'positron':
       return {
         key: 'carto-light',
         url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxNativeZoom: MAP_MAX_ZOOM,
+        maxZoom: MAP_MAX_ZOOM,
       }
     case 'voyager':
       return {
         key: 'carto-voyager',
         url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxNativeZoom: MAP_MAX_ZOOM,
+        maxZoom: MAP_MAX_ZOOM,
       }
     case 'topo':
       return {
@@ -159,6 +190,7 @@ function basemapConfig(
         attribution:
           'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
         maxZoom: 17,
+        maxNativeZoom: 17,
       }
     default:
       return { key: 'std-osm', url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION }
@@ -178,7 +210,11 @@ function BasemapTileLayer() {
       key={cfg.key}
       url={cfg.url}
       attribution={cfg.attribution}
+      updateWhenZooming={false}
+      updateWhenIdle
+      keepBuffer={4}
       {...(cfg.maxZoom != null ? { maxZoom: cfg.maxZoom } : {})}
+      {...(cfg.maxNativeZoom != null ? { maxNativeZoom: cfg.maxNativeZoom } : {})}
     />
   )
 }
@@ -412,7 +448,10 @@ function MapViewSnapshotSync({
       try {
         if (!map.getContainer()?.isConnected) return
         const c = map.getCenter()
-        snapshotRef.current = { center: [c.lat, c.lng], zoom: map.getZoom() }
+        snapshotRef.current = {
+          center: [c.lat, c.lng],
+          zoom: Math.min(MAP_MAX_ZOOM, Math.round(map.getZoom())),
+        }
       } catch {
         // Leaflet can be mid-teardown during React unmount; skip snapshot.
       }
@@ -817,36 +856,45 @@ function TencentLinesPmtilesLayer({ pmtilesUrl }: { pmtilesUrl: string }) {
   return null
 }
 
-/** Resize Leaflet gutter when zoom/pan changes — GCJ shift in px grows with zoom; fixed pad clips lines. */
-function GcjMapOverscanSync({ onPadChange }: { onPadChange: (px: number) => void }) {
+function MapZoomButtons({ portalEl }: { portalEl: HTMLElement | null }) {
   const map = useMap()
-  const onPadChangeRef = useRef(onPadChange)
-  onPadChangeRef.current = onPadChange
-  const lastPadRef = useRef(0)
-
-  const sync = useCallback(() => {
-    const pad = recommendedGcjOverscanPadPx(map)
-    if (Math.abs(pad - lastPadRef.current) < 6) {
-      return
-    }
-    lastPadRef.current = pad
-    onPadChangeRef.current(pad)
-    requestAnimationFrame(() => {
-      map.invalidateSize({ animate: false })
-      requestAnimationFrame(() => map.invalidateSize({ animate: false }))
-    })
-  }, [map])
+  const [zoom, setZoom] = useState(() => map.getZoom())
+  const minZoom = map.getMinZoom()
+  const maxZoom = map.getMaxZoom()
 
   useEffect(() => {
-    lastPadRef.current = 0
-    sync()
-    map.on('zoom zoomend move moveend', sync)
+    const onZoomEnd = () => setZoom(map.getZoom())
+    map.on('zoomend', onZoomEnd)
     return () => {
-      map.off('zoom zoomend move moveend', sync)
+      map.off('zoomend', onZoomEnd)
     }
-  }, [map, sync])
+  }, [map])
 
-  return null
+  if (!portalEl) return null
+
+  return createPortal(
+    <div className="flex flex-col gap-1" role="group" aria-label="Map zoom">
+      <button
+        type="button"
+        className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-[var(--color-border)] shadow-md text-[var(--color-text)] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        aria-label="Zoom in"
+        disabled={zoom >= maxZoom}
+        onClick={() => map.zoomIn(1)}
+      >
+        <Plus className="w-5 h-5" aria-hidden />
+      </button>
+      <button
+        type="button"
+        className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-[var(--color-border)] shadow-md text-[var(--color-text)] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        aria-label="Zoom out"
+        disabled={zoom <= minZoom}
+        onClick={() => map.zoomOut(1)}
+      >
+        <Minus className="w-5 h-5" aria-hidden />
+      </button>
+    </div>,
+    portalEl,
+  )
 }
 
 function TencentCoveragePaneOffset() {
@@ -1060,11 +1108,11 @@ export default function MapView() {
   const selectCommunity = useStore((s) => s.selectCommunity)
   const setSavedMapViewActive = useStore((s) => s.setSavedMapViewActive)
   const streetviewPmtilesUrl = `${import.meta.env.BASE_URL}data/lines_${streetviewProvider}.pmtiles`
-  const [gcjOverscanPx, setGcjOverscanPx] = useState(380)
   const mapSnapshotRef = useRef<{ center: L.LatLngExpression; zoom: number }>({
     center: GUANGZHOU_CENTER,
     zoom: 12,
   })
+  const [zoomControlsEl, setZoomControlsEl] = useState<HTMLDivElement | null>(null)
 
   useEffect(() => {
     loadCommunities().then(setCommunities)
@@ -1227,12 +1275,16 @@ export default function MapView() {
       </style>
       <div className="absolute inset-0 overflow-hidden">
         <div
+          ref={setZoomControlsEl}
+          className={`absolute bottom-4 right-4 z-[1000] pointer-events-auto${streetviewModalOpen ? ' hidden' : ''}`}
+        />
+        <div
           className="absolute"
           style={{
-            top: -gcjOverscanPx,
-            left: -gcjOverscanPx,
-            width: `calc(100% + ${2 * gcjOverscanPx}px)`,
-            height: `calc(100% + ${2 * gcjOverscanPx}px)`,
+            top: -GCJ_MAP_OVERSCAN_PAD_PX,
+            left: -GCJ_MAP_OVERSCAN_PAD_PX,
+            width: `calc(100% + ${2 * GCJ_MAP_OVERSCAN_PAD_PX}px)`,
+            height: `calc(100% + ${2 * GCJ_MAP_OVERSCAN_PAD_PX}px)`,
           }}
         >
           {streetviewModalOpen ? (
@@ -1240,15 +1292,19 @@ export default function MapView() {
           ) : (
             <MapContainer
               center={mapSnapshotRef.current.center}
-              zoom={mapSnapshotRef.current.zoom}
+              zoom={Math.min(MAP_MAX_ZOOM, Math.round(mapSnapshotRef.current.zoom))}
               className="w-full h-full"
               zoomControl={false}
               preferCanvas={false}
               fadeAnimation={false}
               zoomAnimation={false}
+              zoomSnap={1}
+              zoomDelta={1}
+              maxZoom={MAP_MAX_ZOOM}
             >
               <MapViewSnapshotSync snapshotRef={mapSnapshotRef} />
-              <GcjMapOverscanSync onPadChange={setGcjOverscanPx} />
+              <LeafletTunedWheelZoom />
+              <MapZoomButtons portalEl={zoomControlsEl} />
               <BasemapTileLayer />
 
               <LeafletMoveSync />
