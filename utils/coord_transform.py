@@ -4,7 +4,6 @@ Exact wandergis/coordTransform_py algorithm; pure Python, no external deps.
 Pipeline stays in GCJ-02; conversion only for map display.
 """
 import math
-import numpy as np
 
 # Constants from wandergis coordTransform_py
 _A = 6378245.0
@@ -90,9 +89,11 @@ def gcj02_to_wgs84(lon_gcj: float, lat_gcj: float) -> tuple[float, float]:
 
 
 def gcj02_to_wgs84_array(
-    lons_gcj: np.ndarray, lats_gcj: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
+    lons_gcj, lats_gcj,
+) -> tuple:
     """Batch convert GCJ-02 to WGS84. Returns (lons_wgs, lats_wgs)."""
+    import numpy as np
+
     lons_gcj = np.atleast_1d(np.asarray(lons_gcj, dtype=np.float64))
     lats_gcj = np.atleast_1d(np.asarray(lats_gcj, dtype=np.float64))
     n = lons_gcj.size
