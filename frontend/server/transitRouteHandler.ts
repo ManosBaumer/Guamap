@@ -50,6 +50,40 @@ function parseRequest(body: unknown): TransitRouteRequest | null {
   return { originLat, originLng, destLat, destLng, date, time }
 }
 
+export type ProcessTransitRouteOptions = {
+  /** File cache under data/transit_route_cache (dev/preview only). */
+  useFileCache?: boolean
+}
+
+export async function processTransitRouteBody(
+  body: unknown,
+  amapKey: string,
+  options: ProcessTransitRouteOptions = {},
+): Promise<{ status: number; payload: TransitRouteResponse | { error: string } }> {
+  const parsed = parseRequest(body)
+  if (!parsed) {
+    return { status: 400, payload: { error: 'invalid_request' } }
+  }
+
+  const useFileCache = options.useFileCache !== false
+
+  if (useFileCache) {
+    const cached = readTransitCache(parsed)
+    if (cached) {
+      return { status: 200, payload: cached }
+    }
+  }
+
+  const result: TransitRouteResponse = await fetchAmapTransitRoutes(amapKey, parsed)
+  if (useFileCache && result.routes.length) {
+    writeTransitCache(parsed, result)
+  }
+  return {
+    status: result.error && !result.routes.length ? 502 : 200,
+    payload: result,
+  }
+}
+
 export async function handleTransitRouteRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -68,21 +102,6 @@ export async function handleTransitRouteRequest(
     return
   }
 
-  const parsed = parseRequest(body)
-  if (!parsed) {
-    sendJson(res, 400, { error: 'invalid_request' })
-    return
-  }
-
-  const cached = readTransitCache(parsed)
-  if (cached) {
-    sendJson(res, 200, cached)
-    return
-  }
-
-  const result: TransitRouteResponse = await fetchAmapTransitRoutes(amapKey, parsed)
-  if (result.routes.length) {
-    writeTransitCache(parsed, result)
-  }
-  sendJson(res, result.error && !result.routes.length ? 502 : 200, result)
+  const { status, payload } = await processTransitRouteBody(body, amapKey)
+  sendJson(res, status, payload)
 }

@@ -3,8 +3,18 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_URL"
+
+# Transit planner API (serverless — needs AMAP_KEY in Netlify env vars)
+[[redirects]]
+  from   = "/api/transit-route"
+  to     = "/.netlify/functions/transit-route"
+  status = 200
+  force  = true
 
 [[redirects]]
   from   = "/*"
