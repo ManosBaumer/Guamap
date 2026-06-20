@@ -1,6 +1,9 @@
 """
 Fetch bus/metro lines serving each stop from Amap /v3/bus/stopname API.
 Extends stops_deduped.csv with a 'lines' column (e.g. "4号线,7号线").
+
+WARNING: This API has a strict daily quota. Do not call ensure_stop_lines() in routine
+pipelines — only with an explicit --force-lines flag when you have quota headroom.
 """
 import logging
 import re

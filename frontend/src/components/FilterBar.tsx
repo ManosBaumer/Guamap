@@ -1,4 +1,4 @@
-import { ChevronDown, Star, Compass, DollarSign, Home, TrainFront, SlidersHorizontal, Ruler, Bed, Bath, Sofa, Calendar, User, LogOut, X, Sparkles } from 'lucide-react'
+import { ChevronDown, Star, Compass, DollarSign, Home, TrainFront, SlidersHorizontal, Ruler, Bed, Bath, Sofa, Calendar, User, LogOut, X, Sparkles, Route } from 'lucide-react'
 import NumberFlow from '@number-flow/react'
 import { useShallow } from 'zustand/react/shallow'
 import { supabase } from '@/lib/supabase'
@@ -246,6 +246,8 @@ export default function FilterBar() {
     user,
     setAuthModalOpen,
     anjukeLayerOn,
+    transitPlannerOpen,
+    setTransitPlannerOpen,
   } = useStore(
     useShallow((s) => ({
       appliedFilters: s.appliedFilters,
@@ -259,6 +261,8 @@ export default function FilterBar() {
       user: s.user,
       setAuthModalOpen: s.setAuthModalOpen,
       anjukeLayerOn: s.layers.anjuke,
+      transitPlannerOpen: s.transitPlannerOpen,
+      setTransitPlannerOpen: s.setTransitPlannerOpen,
     })),
   )
 
@@ -274,9 +278,9 @@ export default function FilterBar() {
   const handleSavedClick = () => {
     if (!user) {
       setAuthModalOpen(true)
-    } else {
-      toggleSavedMapView()
+      return
     }
+    toggleSavedMapView()
   }
 
   const hasActiveFilters = (Object.keys(appliedFilters) as (keyof Filters)[]).some((k) =>
@@ -852,10 +856,36 @@ export default function FilterBar() {
       <div className="flex items-center gap-[16px] shrink-0">
         <button
           type="button"
+          onClick={() => setTransitPlannerOpen(!transitPlannerOpen)}
+          className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
+            transitPlannerOpen ? 'bg-[var(--color-primary-light)]' : 'hover:bg-gray-100'
+          }`}
+          title={transitPlannerOpen ? 'Close transit planner' : 'Plan public transit route'}
+          aria-pressed={transitPlannerOpen}
+          aria-label="Transit route planner"
+        >
+          <Route
+            className={`w-5 h-5 ${
+              transitPlannerOpen
+                ? 'text-[var(--color-primary)]'
+                : 'text-[var(--color-text)]'
+            }`}
+          />
+        </button>
+        <button
+          type="button"
           onClick={handleSavedClick}
           className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${savedMapViewActive ? 'bg-[var(--color-primary-light)]' : 'hover:bg-gray-100'
             }`}
-          title={savedMapViewActive ? 'Exit saved listings view' : 'Show saved listings on map'}
+          title={
+            transitPlannerOpen
+              ? savedMapViewActive
+                ? 'Show communities on map (transit planner stays open)'
+                : 'Show saved listings on map (transit planner stays open)'
+              : savedMapViewActive
+                ? 'Exit saved listings view'
+                : 'Show saved listings on map'
+          }
           aria-pressed={savedMapViewActive}
           aria-label={
             savedMapViewActive

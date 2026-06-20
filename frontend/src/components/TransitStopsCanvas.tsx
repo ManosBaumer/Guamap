@@ -2,6 +2,13 @@ import { useEffect, useRef, useCallback } from 'react'
 import L from 'leaflet'
 import { useMap, useMapEvent } from 'react-leaflet'
 import type { Stop } from '@/lib/types'
+import { parseStopLinesField } from '@/lib/stopLinesApi'
+import { stopPopupLinesHtml } from '@/lib/stopLinesPopup'
+import {
+  closeStopMapPopup,
+  openStopMapPopup,
+} from '@/lib/stopMapPopup'
+import { clearMapLayerHover, hitTestBoxes, setMapLayerHover } from '@/lib/mapPointerCursor'
 
 /** Match former `emojiStopDivIcon`: 26×26, 17px emoji. */
 const STOP_ICON_PX = 26
@@ -25,6 +32,8 @@ export default function TransitStopsCanvas({ stops }: { stops: Stop[] }) {
 
   type Hit = { stop: Stop; left: number; top: number; right: number; bottom: number }
   const hitsRef = useRef<Hit[]>([])
+
+  useEffect(() => () => closeStopMapPopup(), [])
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current
@@ -136,16 +145,33 @@ export default function TransitStopsCanvas({ stops }: { stops: Stop[] }) {
       const h = hits[i]!
       if (p.x >= h.left && p.x <= h.right && p.y >= h.top && p.y <= h.bottom) {
         L.DomEvent.stopPropagation(e.originalEvent)
-        const el = document.createElement('div')
-        el.className = 'text-xs max-w-[220px] leading-snug'
-        el.textContent = h.stop.name?.trim() || 'Stop'
-        L.popup({ maxWidth: 280, closeButton: true, className: 'guamap-transit-stop-popup' })
-          .setLatLng([h.stop.lat, h.stop.lon])
-          .setContent(el)
-          .openOn(map)
+        const stop = h.stop
+        const isMetro = stop.type === 'metro'
+        const lines = parseStopLinesField(stop.lines)
+
+        openStopMapPopup(
+          map,
+          stop.lat,
+          stop.lon,
+          stopPopupLinesHtml(
+            stop.name,
+            lines.length ? lines : null,
+            isMetro,
+            lines.length ? undefined : 'Line data currently unavailable.',
+          ),
+        )
         return
       }
     }
+  })
+
+  useMapEvent('mousemove', (e) => {
+    const hit = hitTestBoxes(hitsRef.current, e.containerPoint.x, e.containerPoint.y)
+    setMapLayerHover(map, 'stop', hit != null)
+  })
+
+  useMapEvent('mouseout', () => {
+    clearMapLayerHover(map, 'stop')
   })
 
   return null

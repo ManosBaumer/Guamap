@@ -11,8 +11,31 @@ import type {
   StreetviewProvider,
 } from './types'
 import { persistSavedListingsToFile } from './savedListingsStorage'
+import { fetchTransitRoutes } from './transitRouteApi'
+import {
+  defaultDepartDate,
+  defaultDepartTime,
+  type TransitMapPoint,
+  type TransitRoutePlan,
+} from './transitRouteTypes'
 
 import { supabase } from './supabase'
+
+type TransitPickMode = 'none' | 'community' | 'map'
+
+/** Turning off Listings hides community/saved pick targets — exit community pick mode. */
+function clearTransitCommunityPickModes(s: {
+  transitPickOriginMode: TransitPickMode
+  transitPickDestinationMode: TransitPickMode
+}) {
+  const patch: {
+    transitPickOriginMode?: 'none'
+    transitPickDestinationMode?: 'none'
+  } = {}
+  if (s.transitPickOriginMode === 'community') patch.transitPickOriginMode = 'none'
+  if (s.transitPickDestinationMode === 'community') patch.transitPickDestinationMode = 'none'
+  return patch
+}
 
 interface AppState {
   user: any | null
@@ -22,6 +45,7 @@ interface AppState {
 
   layers: Record<LayerName, boolean>
   toggleLayer: (layer: LayerName) => void
+  setLayerEnabled: (layer: LayerName, enabled: boolean) => void
 
   /** Active when `layers.baseMap` is true. Toggling base map on resets to satellite. */
   baseMapStyle: BaseMapStyle
@@ -32,9 +56,6 @@ interface AppState {
 
   streetviewProvider: StreetviewProvider
   setStreetviewProvider: (provider: StreetviewProvider) => void
-
-  maxTransitTime: number
-  setMaxTransitTime: (val: number) => void
 
   /** Loaded with the map; used to jump from saved listings to a community marker. */
   communities: Community[]
@@ -98,10 +119,6 @@ interface AppState {
   showAreasOutsideFourDistricts: boolean
   toggleShowAreasOutsideFourDistricts: () => void
 
-  /** When stops layer is on: metro only by default; enable to also show bus stops. */
-  showBusStops: boolean
-  setShowBusStops: (show: boolean) => void
-
   activeDistricts: Record<string, boolean>
   toggleDistrict: (name: string) => void
 
@@ -111,6 +128,34 @@ interface AppState {
   closeModal: () => void
   modalNext: () => void
   modalPrev: () => void
+
+  /** On-demand Amap transit planner (separate from listing panel). */
+  /** Panel to restore when closing the transit planner. */
+  transitReturnPanel: 'saved' | 'community' | 'none'
+  transitPlannerOpen: boolean
+  transitPickOriginMode: 'none' | 'community' | 'map'
+  transitPickDestinationMode: 'none' | 'community' | 'map'
+  transitOrigin: TransitMapPoint | null
+  transitDestination: TransitMapPoint | null
+  transitDepartDate: string
+  transitDepartTime: string
+  transitRoutes: TransitRoutePlan[] | null
+  transitSelectedRouteIndex: number
+  transitLoading: boolean
+  transitError: string | null
+  transitCached: boolean
+  setTransitPlannerOpen: (open: boolean) => void
+  setTransitPickOriginMode: (mode: 'none' | 'community' | 'map') => void
+  setTransitPickDestinationMode: (mode: 'none' | 'community' | 'map') => void
+  setTransitOrigin: (point: TransitMapPoint | null) => void
+  clearTransitOrigin: () => void
+  setTransitDestination: (point: TransitMapPoint | null) => void
+  clearTransitDestination: () => void
+  setTransitDepartDate: (date: string) => void
+  setTransitDepartTime: (time: string) => void
+  setTransitSelectedRouteIndex: (index: number) => void
+  clearTransitRoutes: () => void
+  requestTransitRoutes: () => Promise<void>
 }
 
 const defaultFilters: Filters = {
@@ -154,14 +199,31 @@ export const useStore = create<AppState>((set, get) => ({
       if (layer === 'baseMap' && nextOn) {
         return { layers: { ...s.layers, [layer]: nextOn }, baseMapStyle: 'satellite' }
       }
+      if (layer === 'anjuke' && !nextOn) {
+        return {
+          layers: { ...s.layers, [layer]: nextOn },
+          ...clearTransitCommunityPickModes(s),
+        }
+      }
       return { layers: { ...s.layers, [layer]: nextOn } }
+    }),
+  setLayerEnabled: (layer, enabled) =>
+    set((s) => {
+      if (s.layers[layer] === enabled) return s
+      if (layer === 'baseMap' && enabled) {
+        return { layers: { ...s.layers, [layer]: enabled }, baseMapStyle: 'satellite' }
+      }
+      if (layer === 'anjuke' && !enabled) {
+        return {
+          layers: { ...s.layers, [layer]: enabled },
+          ...clearTransitCommunityPickModes(s),
+        }
+      }
+      return { layers: { ...s.layers, [layer]: enabled } }
     }),
 
   compoundColorMode: 'none',
   setCompoundColorMode: (mode) => set({ compoundColorMode: mode }),
-
-  maxTransitTime: 120,
-  setMaxTransitTime: (val) => set({ maxTransitTime: val }),
 
   communities: [],
   setCommunities: (list) =>
@@ -184,6 +246,38 @@ export const useStore = create<AppState>((set, get) => ({
   loadingListings: false,
   selectCommunity: (community) =>
     set((s) => {
+      if (s.transitPlannerOpen) {
+        if (community === null) return s
+        if (s.transitPickOriginMode === 'community') {
+          const nextOrigin = {
+            lat: community.lat,
+            lng: community.lng,
+            label: community.name,
+          }
+          return {
+            transitOrigin: nextOrigin,
+            transitPickOriginMode: 'none' as const,
+            transitRoutes: null,
+            transitError: null,
+            transitCached: false,
+          }
+        }
+        if (s.transitPickDestinationMode === 'community') {
+          const nextDest = {
+            lat: community.lat,
+            lng: community.lng,
+            label: community.name,
+          }
+          return {
+            transitDestination: nextDest,
+            transitPickDestinationMode: 'none' as const,
+            transitRoutes: null,
+            transitError: null,
+            transitCached: false,
+          }
+        }
+        return s
+      }
       if (community === null) {
         return {
           selectedCommunity: null,
@@ -222,6 +316,20 @@ export const useStore = create<AppState>((set, get) => ({
   toggleSavedMapView: () =>
     set((s) => {
       const next = !s.savedMapViewActive
+      if (s.transitPlannerOpen) {
+        return {
+          savedMapViewActive: next,
+          mapFocusedListingId: null,
+          ...(next
+            ? {
+                selectedCommunity: null,
+                selectedListings: null,
+                loadingListings: false,
+                layers: { ...s.layers, anjuke: true },
+              }
+            : {}),
+        }
+      }
       return {
         savedMapViewActive: next,
         selectedCommunity: null,
@@ -319,9 +427,6 @@ export const useStore = create<AppState>((set, get) => ({
   toggleShowAreasOutsideFourDistricts: () =>
     set((s) => ({ showAreasOutsideFourDistricts: !s.showAreasOutsideFourDistricts })),
 
-  showBusStops: false,
-  setShowBusStops: (show) => set({ showBusStops: show }),
-
   activeDistricts: { '天河区': true, '越秀区': true, '海珠区': true, '荔湾区': true },
   toggleDistrict: (name) =>
     set((s) => ({ activeDistricts: { ...s.activeDistricts, [name]: !s.activeDistricts[name] } })),
@@ -334,4 +439,151 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => ({ modalIndex: Math.min(s.modalIndex + 1, s.modalImages.length - 1) })),
   modalPrev: () =>
     set((s) => ({ modalIndex: Math.max(s.modalIndex - 1, 0) })),
+
+  transitPlannerOpen: false,
+  transitReturnPanel: 'none' as const,
+  transitPickOriginMode: 'none',
+  transitPickDestinationMode: 'none',
+  transitOrigin: null,
+  transitDestination: null,
+  transitDepartDate: defaultDepartDate(),
+  transitDepartTime: defaultDepartTime(),
+  transitRoutes: null,
+  transitSelectedRouteIndex: 0,
+  transitLoading: false,
+  transitError: null,
+  transitCached: false,
+
+  setTransitPlannerOpen: (open) =>
+    set((s) => {
+      if (!open) {
+        const returnPanel = s.transitReturnPanel
+        return {
+          transitPlannerOpen: false,
+          transitReturnPanel: 'none',
+          transitPickOriginMode: 'none',
+          transitPickDestinationMode: 'none',
+          transitRoutes: null,
+          transitError: null,
+          transitCached: false,
+          ...(returnPanel === 'saved' ? { savedMapViewActive: true } : {}),
+        }
+      }
+      const transitReturnPanel: 'saved' | 'community' | 'none' = s.savedMapViewActive
+        ? 'saved'
+        : s.selectedCommunity
+          ? 'community'
+          : 'none'
+      return {
+        transitPlannerOpen: true,
+        transitReturnPanel,
+        transitPickOriginMode: 'none',
+        transitPickDestinationMode: 'none',
+        transitDepartDate: s.transitDepartDate || defaultDepartDate(),
+        transitDepartTime: s.transitDepartTime || defaultDepartTime(),
+      }
+    }),
+
+  setTransitPickOriginMode: (mode) =>
+    set((s) => ({
+      transitPickOriginMode: mode,
+      transitPickDestinationMode: mode !== 'none' ? 'none' : s.transitPickDestinationMode,
+      ...(mode === 'community' && !s.layers.anjuke
+        ? { layers: { ...s.layers, anjuke: true } }
+        : {}),
+    })),
+
+  setTransitPickDestinationMode: (mode) =>
+    set((s) => ({
+      transitPickDestinationMode: mode,
+      transitPickOriginMode: mode !== 'none' ? 'none' : s.transitPickOriginMode,
+      ...(mode === 'community' && !s.layers.anjuke
+        ? { layers: { ...s.layers, anjuke: true } }
+        : {}),
+    })),
+
+  setTransitOrigin: (point) =>
+    set({
+      transitOrigin: point,
+      transitPickOriginMode: 'none',
+      transitRoutes: null,
+      transitError: null,
+      transitCached: false,
+    }),
+
+  clearTransitOrigin: () =>
+    set({
+      transitOrigin: null,
+      transitPickOriginMode: 'none',
+      transitRoutes: null,
+      transitError: null,
+      transitCached: false,
+    }),
+
+  setTransitDestination: (point) =>
+    set({
+      transitDestination: point,
+      transitPickDestinationMode: 'none',
+      transitRoutes: null,
+      transitError: null,
+      transitCached: false,
+    }),
+
+  clearTransitDestination: () =>
+    set({
+      transitDestination: null,
+      transitPickDestinationMode: 'none',
+      transitRoutes: null,
+      transitError: null,
+      transitCached: false,
+    }),
+
+  setTransitDepartDate: (date) => set({ transitDepartDate: date, transitRoutes: null, transitError: null }),
+  setTransitDepartTime: (time) => set({ transitDepartTime: time, transitRoutes: null, transitError: null }),
+  setTransitSelectedRouteIndex: (index) => set({ transitSelectedRouteIndex: index }),
+
+  clearTransitRoutes: () =>
+    set({ transitRoutes: null, transitError: null, transitCached: false, transitSelectedRouteIndex: 0 }),
+
+  requestTransitRoutes: async () => {
+    const s = get()
+    if (!s.transitOrigin || !s.transitDestination) {
+      set({ transitError: 'Set both origin and destination first.' })
+      return
+    }
+    set({ transitLoading: true, transitError: null })
+    try {
+      const result = await fetchTransitRoutes({
+        originLat: s.transitOrigin.lat,
+        originLng: s.transitOrigin.lng,
+        destLat: s.transitDestination.lat,
+        destLng: s.transitDestination.lng,
+        date: s.transitDepartDate,
+        time: s.transitDepartTime,
+      })
+      if (!result.routes.length) {
+        set({
+          transitLoading: false,
+          transitRoutes: null,
+          transitError: result.error ?? 'No route found.',
+          transitCached: false,
+        })
+        return
+      }
+      set({
+        transitLoading: false,
+        transitRoutes: result.routes,
+        transitSelectedRouteIndex: 0,
+        transitError: null,
+        transitCached: result.cached,
+        layers: { ...get().layers, stops: true },
+      })
+    } catch {
+      set({
+        transitLoading: false,
+        transitError: 'Could not load transit routes.',
+        transitCached: false,
+      })
+    }
+  },
 }))

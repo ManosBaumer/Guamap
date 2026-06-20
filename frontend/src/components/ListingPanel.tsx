@@ -1,6 +1,6 @@
-import { X, ArrowUpDown, ChevronDown, ExternalLink } from "lucide-react";
+import { X, ArrowUpDown, ExternalLink } from "lucide-react";
 
-import { useEffect, useLayoutEffect, useMemo, useCallback, useState, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 
 import { useShallow } from "zustand/react/shallow";
 import { useStore } from "@/lib/store";
@@ -12,32 +12,7 @@ import { filterAndSortListings, filteredSavedListings as getFilteredSavedListing
 import type { SortMode } from "@/lib/types";
 
 import ListingCard from "./ListingCard";
-
-/** Amap-style labels: 地铁 / 轻轨 = metro; otherwise transit leg = bus. */
-
-function isMetroTransitLine(line: string | undefined): boolean {
-  const l = line ?? "";
-
-  return l.includes("地铁") || l.includes("轻轨");
-}
-
-function transitLegEmoji(line: string | undefined): string {
-  return isMetroTransitLine(line) ? "Ⓜ️" : "🚌";
-}
-
-/** Metro routes like 地铁4号线(…) → "4 line" when a 号线 number is present. */
-
-function formatTransitLineLabel(line: string | undefined): string {
-  const l = line ?? "";
-
-  if (!isMetroTransitLine(l)) return l;
-
-  const m = l.match(/(?:地铁|轻轨)\s*(\d+)\s*号线/) || l.match(/(\d+)\s*号线/);
-
-  if (m) return `${m[1]} line`;
-
-  return l;
-}
+import TransitPlannerPanel from "./TransitPlannerPanel";
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: "price-asc", label: "Price ↑" },
@@ -50,7 +25,6 @@ const SORT_OPTIONS: { value: SortMode; label: string }[] = [
 ];
 
 export default function ListingPanel() {
-  const [transitBreakdownOpen, setTransitBreakdownOpen] = useState(false);
   const communityListScrollRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -74,6 +48,7 @@ export default function ListingPanel() {
 
     mapFocusedListingId,
     setPanelListingOrderIds,
+    transitPlannerOpen,
   } = useStore(
     useShallow((s) => ({
       selectedCommunity: s.selectedCommunity,
@@ -92,12 +67,9 @@ export default function ListingPanel() {
       savedListings: s.savedListings,
       mapFocusedListingId: s.mapFocusedListingId,
       setPanelListingOrderIds: s.setPanelListingOrderIds,
+      transitPlannerOpen: s.transitPlannerOpen,
     })),
   );
-
-  useEffect(() => {
-    setTransitBreakdownOpen(false);
-  }, [selectedCommunity?.id]);
 
   /** New community → show listings from the top (don’t keep prior scroll). */
   useLayoutEffect(() => {
@@ -171,6 +143,10 @@ export default function ListingPanel() {
     });
     return () => cancelAnimationFrame(h);
   }, [mapFocusedListingId]);
+
+  if (transitPlannerOpen) {
+    return <TransitPlannerPanel />
+  }
 
   if (!savedMapViewActive && !selectedCommunity) return null;
 
@@ -312,94 +288,6 @@ export default function ListingPanel() {
             </div>
           )}
         </div>
-
-        {comm.transitMin > 0 && (
-          <div className="mt-4 p-3 bg-[var(--color-bg-card)] rounded-xl">
-            {comm.transitSegments.length > 0 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setTransitBreakdownOpen((o) => !o)}
-                  className="flex w-full min-w-0 items-center justify-between gap-2 text-left rounded-lg -m-1 p-1 hover:bg-black/[0.04] transition-colors cursor-pointer"
-                  aria-expanded={transitBreakdownOpen}
-                  aria-controls="community-transit-breakdown"
-                  id="community-transit-toggle"
-                >
-                  <span className="text-xs font-semibold text-gray-400 shrink-0">
-                    Transit to SCUT
-                  </span>
-
-                  <span className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-bold text-[var(--color-text)]">
-                      {comm.transitMin} min
-                    </span>
-
-                    <ChevronDown
-                      className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${transitBreakdownOpen ? "rotate-180" : ""}`}
-                      aria-hidden
-                    />
-                  </span>
-                </button>
-
-                {transitBreakdownOpen && (
-                  <div
-                    id="community-transit-breakdown"
-                    className="space-y-1 mt-3 pt-2 border-t border-[var(--color-border)]"
-                    role="region"
-                    aria-labelledby="community-transit-toggle"
-                  >
-                    {comm.transitCost > 0 && (
-                      <p className="text-xs text-gray-400 pb-2 mb-1 border-b border-[var(--color-border)]">
-                        Cost: ¥{comm.transitCost}
-                      </p>
-                    )}
-
-                    {comm.transitSegments.map((seg, i) => (
-                      <div key={i} className="text-xs text-[var(--color-text)]">
-                        {seg.type === "transit" ? (
-                          <span>
-                            {transitLegEmoji(seg.line)}{" "}
-                            <span className="font-medium">
-                              {formatTransitLineLabel(seg.line)}
-                            </span>
-                            <span className="text-gray-400">
-                              {" "}
-                              — {seg.from} → {seg.to} ({seg.stops} stops,{" "}
-                              {Math.round(seg.dur / 60)} min)
-                            </span>
-                          </span>
-                        ) : (
-                          <span>
-                            🚶 Walk {seg.dist ? `${seg.dist}m` : ""} (
-                            {Math.round(seg.dur / 60)} min)
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-gray-400">
-                    Transit to SCUT
-                  </span>
-
-                  <span className="text-sm font-bold text-[var(--color-text)]">
-                    {comm.transitMin} min
-                  </span>
-                </div>
-
-                {comm.transitCost > 0 && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    Cost: ¥{comm.transitCost}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Listings count + sort */}

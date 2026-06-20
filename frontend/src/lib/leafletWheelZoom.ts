@@ -38,7 +38,7 @@ export function LeafletTunedWheelZoom() {
 
       map.stop()
 
-      const d2 = h._delta / (map.options.wheelPxPerZoomLevel * 4)
+      const d2 = h._delta / ((map.options.wheelPxPerZoomLevel ?? 60) * 4)
       const d3 = (4 * Math.log(2 / (1 + Math.exp(-Math.abs(d2)))) / Math.LN2)
       const cappedD3 = Math.min(d3, WHEEL_MAX_LEVELS_PER_BURST)
       const d4 = snap ? Math.ceil(cappedD3 / snap) * snap : cappedD3

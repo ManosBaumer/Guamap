@@ -240,14 +240,17 @@ def prepare_anjuke():
 
 
 def prepare_stops():
-    """Convert stops_raw.csv to JSON with WGS84 coords (all bus/metro stops; no per-stop transit times)."""
+    """Convert deduped stops CSV to JSON with WGS84 coords and prefetched line names."""
     import csv
-    stops_path = DATA / "stops_raw.csv"
+
+    deduped_path = DATA / "stops_deduped.csv"
+    stops_path = deduped_path if deduped_path.exists() else DATA / "stops_raw.csv"
     if not stops_path.exists():
-        print("  Skipping stops: stops_raw.csv not found")
+        print("  Skipping stops: stops_deduped.csv / stops_raw.csv not found")
         return
 
     stops = []
+    with_lines = 0
     with open(stops_path, "r", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             try:
@@ -261,19 +264,27 @@ def prepare_stops():
             typ = (row.get("type") or "bus").strip().lower()
             if typ not in ("bus", "metro"):
                 typ = "bus"
-            stops.append(
-                {
-                    "id": row.get("stop_id", ""),
-                    "lat": round(lat_w, 6),
-                    "lon": round(lon_w, 6),
-                    "name": (row.get("name") or "").strip(),
-                    "type": typ,
-                }
-            )
+            lines_val = (row.get("lines") or "").strip()
+            if lines_val:
+                with_lines += 1
+            entry = {
+                "id": row.get("stop_id", ""),
+                "lat": round(lat_w, 6),
+                "lon": round(lon_w, 6),
+                "name": (row.get("name") or "").strip(),
+                "type": typ,
+            }
+            if lines_val:
+                entry["lines"] = lines_val
+            stops.append(entry)
 
     out_file = OUT / "stops.json"
     out_file.write_text(json.dumps(stops, separators=(",", ":")), encoding="utf-8")
-    print(f"  Stops: {len(stops)} from stops_raw.csv ({out_file.stat().st_size / 1024:.0f} KB)")
+    metro_n = sum(1 for s in stops if s.get("type") == "metro")
+    print(
+        f"  Stops: {len(stops)} from {stops_path.name} "
+        f"({metro_n} metro, {with_lines} with lines, {out_file.stat().st_size / 1024:.0f} KB)"
+    )
 
 
 def prepare_geojson():

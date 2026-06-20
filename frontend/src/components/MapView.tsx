@@ -9,13 +9,14 @@ import {
   type MutableRefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON, ImageOverlay, Polygon, Pane, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, ImageOverlay, Polygon, Pane, useMap, useMapEvent } from 'react-leaflet'
 import { Plus, Minus } from 'lucide-react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useStore } from '@/lib/store'
 import { gcjBasemapShiftLayerPixels, GCJ_MAP_OVERSCAN_PAD_PX } from '@/lib/gcj'
 import { LeafletTunedWheelZoom } from '@/lib/leafletWheelZoom'
+import { TransitPlannerMapLayer } from '@/components/TransitPlannerMapLayer'
 import StreetviewModal from '@/components/StreetviewModal'
 import CommunityListingCountsCanvas, { type CommunityCountCanvasItem } from '@/components/CommunityListingCountsCanvas'
 import TransitStopsCanvas from '@/components/TransitStopsCanvas'
@@ -36,6 +37,7 @@ import {
 import { communityPassesMapFilters, stopPassesMapFilters, type MapLocationFilterOpts } from '@/lib/mapQuery'
 import { resolveListingMapPosition, savedListingPositions } from '@/lib/listingMapLayout'
 import { filteredSavedListings } from '@/lib/panelListings'
+import { clearMapLayerHover, setMapLayerHover } from '@/lib/mapPointerCursor'
 import type { Community, Stop, HeatmapBounds, ScutLocation, StreetviewIndex, StreetviewIndexEntry } from '@/lib/types'
 
 const GUANGZHOU_CENTER: L.LatLngExpression = [23.13, 113.33]
@@ -405,28 +407,56 @@ function SavedListingStarMarkers({ mapFilterOpts }: { mapFilterOpts: MapLocation
 
   const visible = useMemo(() => {
     const b = bounds.pad(0.22)
-    const out: { id: number; lat: number; lng: number }[] = []
+    const out: { id: number; lat: number; lng: number; label: string }[] = []
     for (const [id, pos] of positions) {
       if (b.contains([pos.lat, pos.lng])) {
-        out.push({ id, lat: pos.lat, lng: pos.lng })
+        const snapshot = savedListings.find((s) => s.listing.id === id)
+        const label = snapshot?.communityName ?? snapshot?.listing.title ?? 'Saved listing'
+        out.push({ id, lat: pos.lat, lng: pos.lng, label })
       }
     }
     return out
-  }, [positions, bounds])
+  }, [positions, bounds, savedListings])
 
   if (!layers.anjuke || !savedMapViewActive) return null
 
   return (
     <>
-      {visible.map(({ id, lat, lng }) => (
+      {visible.map(({ id, lat, lng, label }) => (
         <Marker
           key={id}
           position={[lat, lng]}
           icon={getSavedListingStarIcon(mapFocusedListingId === id)}
           zIndexOffset={mapFocusedListingId === id ? 1400 : 700}
           eventHandlers={{
+            mouseover: () => setMapLayerHover(map, 'saved', true),
+            mouseout: () => clearMapLayerHover(map, 'saved'),
             click: (e) => {
               L.DomEvent.stopPropagation(e)
+              const state = useStore.getState()
+              if (state.transitPlannerOpen && state.savedMapViewActive) {
+                const point = { lat, lng, label }
+                if (state.transitPickOriginMode !== 'none') {
+                  state.setTransitOrigin(point)
+                  if (state.transitDestination) void state.requestTransitRoutes()
+                  return
+                }
+                if (state.transitPickDestinationMode !== 'none') {
+                  state.setTransitDestination(point)
+                  if (state.transitOrigin) void state.requestTransitRoutes()
+                  return
+                }
+                if (!state.transitOrigin) {
+                  state.setTransitOrigin(point)
+                  if (state.transitDestination) void state.requestTransitRoutes()
+                  return
+                }
+                if (!state.transitDestination) {
+                  state.setTransitDestination(point)
+                  if (state.transitOrigin) void state.requestTransitRoutes()
+                  return
+                }
+              }
               setMapFocusedListingId(id)
             },
           }}
@@ -551,6 +581,10 @@ function CommunityMarkers({
 
   const selectCb = useCallback((c: Community) => {
     selectCommunity(c)
+    const state = useStore.getState()
+    if (state.transitPlannerOpen && state.transitOrigin && state.transitDestination) {
+      void state.requestTransitRoutes()
+    }
   }, [selectCommunity])
 
   useEffect(() => {
@@ -730,33 +764,31 @@ function StopMarkers({
   mapFilterOpts: MapLocationFilterOpts
 }) {
   const layers = useStore((s) => s.layers)
-  const showBusStops = useStore((s) => s.showBusStops)
 
   const filtered = useMemo(() => {
-    let list = stops.filter((s) => stopPassesMapFilters(s, mapFilterOpts))
-    if (!showBusStops) list = list.filter((s) => s.type === 'metro')
-    return list
-  }, [stops, mapFilterOpts, showBusStops])
+    return stops.filter((s) => s.type === 'metro' && stopPassesMapFilters(s, mapFilterOpts))
+  }, [stops, mapFilterOpts])
 
   if (!layers.stops) return null
 
   return <StopMarkersInView filtered={filtered} />
 }
 
+/** Isochrone heatmap raster threshold (minutes); fixed — no user filter. */
+const HEATMAP_RASTER_THRESHOLD = 120
+
 function HeatmapOverlay({ gridBounds }: { gridBounds: HeatmapBounds | null }) {
   const layers = useStore((s) => s.layers)
-  const maxTransitTime = useStore((s) => s.maxTransitTime)
 
   const config = useMemo(() => {
     if (!layers.heatmap || !gridBounds) return null
-    const threshold = Math.min(maxTransitTime, 120)
-    const rounded = Math.ceil(threshold / 10) * 10
+    const rounded = Math.ceil(HEATMAP_RASTER_THRESHOLD / 10) * 10
     return {
       key: `grid-${rounded}`,
       url: heatmapRasterUrl(rounded),
       bounds: [[gridBounds.south, gridBounds.west], [gridBounds.north, gridBounds.east]] as L.LatLngBoundsExpression,
     }
-  }, [layers.heatmap, gridBounds, maxTransitTime])
+  }, [layers.heatmap, gridBounds])
 
   const [imageReady, setImageReady] = useState(false)
   useEffect(() => {
@@ -962,6 +994,52 @@ function findNearestTencentPano(index: StreetviewIndex, lat: number, lng: number
   return best
 }
 
+const STREETVIEW_HOVER_RADIUS_PX = 16
+
+function isNearStreetviewPano(
+  map: L.Map,
+  index: StreetviewIndex,
+  lat: number,
+  lng: number,
+  containerPoint: L.Point,
+): boolean {
+  const nearest = findNearestTencentPano(index, lat, lng)
+  if (!nearest) return false
+  const pt = map.latLngToContainerPoint([nearest.lat, nearest.lng])
+  const dx = pt.x - containerPoint.x
+  const dy = pt.y - containerPoint.y
+  const r = STREETVIEW_HOVER_RADIUS_PX
+  return dx * dx + dy * dy <= r * r
+}
+
+function transitMapPickActive(): boolean {
+  const st = useStore.getState()
+  return (
+    st.transitPlannerOpen &&
+    (st.transitPickOriginMode === 'map' || st.transitPickDestinationMode === 'map')
+  )
+}
+
+function TencentStreetviewHoverCursor({ index }: { index: StreetviewIndex | null }) {
+  const map = useMap()
+  const enabled = useStore((s) => s.layers.streetview)
+
+  useMapEvent('mousemove', (e) => {
+    if (!enabled || !index || transitMapPickActive()) {
+      clearMapLayerHover(map, 'streetview')
+      return
+    }
+    const near = isNearStreetviewPano(map, index, e.latlng.lat, e.latlng.lng, e.containerPoint)
+    setMapLayerHover(map, 'streetview', near)
+  })
+
+  useMapEvent('mouseout', () => {
+    clearMapLayerHover(map, 'streetview')
+  })
+
+  return null
+}
+
 function TencentStreetviewClickOpen({
   index,
   onOpen,
@@ -971,10 +1049,19 @@ function TencentStreetviewClickOpen({
 }) {
   const map = useMap()
   const enabled = useStore((s) => s.layers.streetview)
+  const transitPlannerOpen = useStore((s) => s.transitPlannerOpen)
+  const transitPickDestinationMode = useStore((s) => s.transitPickDestinationMode)
+  const transitPickOriginMode = useStore((s) => s.transitPickOriginMode)
   const lastOpenedAtRef = useRef(0)
 
   useEffect(() => {
     if (!enabled || !index) return
+    if (transitPlannerOpen) {
+      const st = useStore.getState()
+      if (st.transitPickOriginMode === 'map' || st.transitPickDestinationMode === 'map') {
+        return
+      }
+    }
 
     const onClick = (e: L.LeafletMouseEvent) => {
       const now = performance.now()
@@ -991,7 +1078,7 @@ function TencentStreetviewClickOpen({
     return () => {
       map.off('click', onClick)
     }
-  }, [enabled, index, map])
+  }, [enabled, index, map, transitPlannerOpen, transitPickDestinationMode, transitPickOriginMode])
 
   return null
 }
@@ -999,7 +1086,6 @@ function TencentStreetviewClickOpen({
 function CompoundsLayer({ data }: { data: GeoJSON.FeatureCollection }) {
   const layers = useStore((s) => s.layers)
   const compoundColorMode = useStore((s) => s.compoundColorMode)
-  const maxTransitTime = useStore((s) => s.maxTransitTime)
 
   const styleFunc = useCallback((feature: GeoJSON.Feature | undefined) => {
     const props = feature?.properties || {}
@@ -1008,7 +1094,7 @@ function CompoundsLayer({ data }: { data: GeoJSON.FeatureCollection }) {
     const ratingCount = props.ratingCount ?? 0
 
     if (compoundColorMode === 'transit') {
-      if (t >= 0 && t <= maxTransitTime) {
+      if (t >= 0) {
         return { color: timeToColor(t), fillColor: timeToColor(t), fillOpacity: 0.5, weight: 1.5, opacity: 0.8 }
       }
       return { fillOpacity: 0.05, opacity: 0.15, weight: 0.5, color: '#999' }
@@ -1023,13 +1109,13 @@ function CompoundsLayer({ data }: { data: GeoJSON.FeatureCollection }) {
     }
 
     return { color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.15, weight: 1, opacity: 0.5 }
-  }, [compoundColorMode, maxTransitTime])
+  }, [compoundColorMode])
 
   if (!layers.compounds) return null
 
   return (
     <GeoJSON
-      key={`compounds-${compoundColorMode}-${maxTransitTime}`}
+      key={`compounds-${compoundColorMode}`}
       data={data}
       style={styleFunc}
       onEachFeature={(feature, layer) => {
@@ -1098,7 +1184,6 @@ export default function MapView() {
   const [districts, setDistricts] = useState<GeoJSON.FeatureCollection | null>(null)
   const activeDistricts = useStore((s) => s.activeDistricts)
   const showAreasOutsideFourDistricts = useStore((s) => s.showAreasOutsideFourDistricts)
-  const maxTransitTime = useStore((s) => s.maxTransitTime)
   const appliedFilters = useStore((s) => s.appliedFilters)
   const setListingCountDisplay = useStore((s) => s.setListingCountDisplay)
   const savedMapViewActive = useStore((s) => s.savedMapViewActive)
@@ -1148,9 +1233,8 @@ export default function MapView() {
       showAreasOutsideFourDistricts,
       allDistrictsActive,
       inactivePolygons,
-      maxTransitTime,
     }),
-    [districts, showAreasOutsideFourDistricts, allDistrictsActive, inactivePolygons, maxTransitTime],
+    [districts, showAreasOutsideFourDistricts, allDistrictsActive, inactivePolygons],
   )
 
   /** Stable while filter *values* are unchanged — avoids recomputing eligible list / restarting fetches on object identity churn. */
@@ -1304,6 +1388,7 @@ export default function MapView() {
             >
               <MapViewSnapshotSync snapshotRef={mapSnapshotRef} />
               <LeafletTunedWheelZoom />
+              <TransitPlannerMapLayer />
               <MapZoomButtons portalEl={zoomControlsEl} />
               <BasemapTileLayer />
 
@@ -1325,6 +1410,7 @@ export default function MapView() {
                   setStreetviewModalOpen(true)
                 }}
               />
+              <TencentStreetviewHoverCursor index={streetviewIndex} />
               <Pane name="compoundsBelow" style={{ zIndex: 350 }}>
                 {compoundsData && <CompoundsLayer data={compoundsData} />}
               </Pane>
@@ -1363,6 +1449,7 @@ export default function MapView() {
             setStreetviewModalEntry(null)
           }}
         />
+
       </div>
     </div>
   )

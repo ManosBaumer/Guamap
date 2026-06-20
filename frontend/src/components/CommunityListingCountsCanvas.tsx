@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import L from 'leaflet'
 import { useMap, useMapEvent } from 'react-leaflet'
 import type { Community } from '@/lib/types'
+import { clearMapLayerHover, hitTestBoxes, setMapLayerHover } from '@/lib/mapPointerCursor'
 
 /** Match former `getCommunityListingIcon` sizing in MapView (visual parity). */
 function badgeLayout(count: number): { h: number; fs: number; padX: number; w: number } {
@@ -286,6 +287,15 @@ export default function CommunityListingCountsCanvas({
         return
       }
     }
+  })
+
+  useMapEvent('mousemove', (e) => {
+    const hit = hitTestBoxes(hitsRef.current, e.containerPoint.x, e.containerPoint.y)
+    setMapLayerHover(map, 'community', hit != null)
+  })
+
+  useMapEvent('mouseout', () => {
+    clearMapLayerHover(map, 'community')
   })
 
   return null

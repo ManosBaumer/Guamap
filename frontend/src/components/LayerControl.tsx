@@ -9,7 +9,7 @@ const LAYERS: { id: LayerName; label: string; icon: React.ReactNode }[] = [
   { id: 'anjuke', label: 'Listings', icon: <Home className="w-5 h-5" /> },
   { id: 'streetview', label: 'Street View', icon: <Camera className="w-5 h-5" /> },
   { id: 'metro', label: 'Metro', icon: <TrainFront className="w-5 h-5" /> },
-  { id: 'stops', label: 'Stops', icon: <Map className="w-5 h-5" /> },
+  { id: 'stops', label: 'Metro stops', icon: <Map className="w-5 h-5" /> },
   { id: 'compounds', label: 'Residential areas', icon: <Building className="w-5 h-5" /> },
   { id: 'heatmap', label: 'Isochrone', icon: <Flame className="w-5 h-5" /> },
   { id: 'baseMap', label: 'Base map', icon: <Layers className="w-5 h-5" /> },
@@ -77,27 +77,6 @@ function LayerCardWithOptions({
   )
 }
 
-function StopLayerOptionsInner() {
-  const showBusStops = useStore((s) => s.showBusStops)
-  const setShowBusStops = useStore((s) => s.setShowBusStops)
-
-  return (
-    <button
-      type="button"
-      onClick={() => setShowBusStops(!showBusStops)}
-      className="flex items-center gap-3 cursor-pointer w-full text-left"
-    >
-      <span
-        className={`w-[17px] h-[17px] rounded-full border-2 flex items-center justify-center transition-colors ${
-          showBusStops ? 'border-[var(--color-primary)]' : 'border-gray-300'
-        }`}
-      >
-        {showBusStops && <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-primary)]" />}
-      </span>
-      <span className="text-base text-[var(--color-text-muted)] font-medium">Show bus stops</span>
-    </button>
-  )
-}
 
 function BaseMapOptionsInner() {
   const { baseMapStyle, setBaseMapStyle } = useStore()
@@ -344,9 +323,6 @@ function DistrictSelector() {
 }
 
 export default function LayerControl() {
-  const maxTransitTime = useStore((s) => s.maxTransitTime)
-  const setMaxTransitTime = useStore((s) => s.setMaxTransitTime)
-
   return (
     <aside className="w-64 bg-white border-r border-[var(--color-border)] flex flex-col h-full overflow-hidden shrink-0">
       <div className="px-4 pt-4 pb-2">
@@ -357,11 +333,7 @@ export default function LayerControl() {
         <div className="flex flex-col gap-2">
           {LAYERS.map((layer) => (
             <div key={layer.id}>
-              {layer.id === 'stops' ? (
-                <LayerCardWithOptions id="stops" label={layer.label} icon={layer.icon}>
-                  <StopLayerOptionsInner />
-                </LayerCardWithOptions>
-              ) : layer.id === 'baseMap' ? (
+              {layer.id === 'baseMap' ? (
                 <LayerCardWithOptions id="baseMap" label={layer.label} icon={layer.icon}>
                   <BaseMapOptionsInner />
                 </LayerCardWithOptions>
@@ -383,37 +355,6 @@ export default function LayerControl() {
         <div className="my-4 border-t border-[var(--color-border)]" />
 
         <DistrictSelector />
-      </div>
-
-      <div className="mt-auto">
-        <div className="px-4 pb-2">
-          <p className="text-sm font-['Lexend_Zetta'] font-medium text-[var(--color-text)] opacity-80 ml-3">
-            Max transit time
-          </p>
-        </div>
-        <div className="bg-[var(--color-bg-card)] rounded-t-[30px] px-4 pt-5 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 relative">
-              <div className="h-[11px] bg-white rounded-[20px] w-full" />
-              <div
-                className="absolute top-0 h-[11px] bg-[var(--color-text)] rounded-[20px] transition-all"
-                style={{ width: `${(maxTransitTime / 120) * 100}%` }}
-              />
-              <input
-                type="range"
-                min={1}
-                max={120}
-                step={1}
-                value={maxTransitTime}
-                onChange={(e) => setMaxTransitTime(Number(e.target.value))}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              />
-            </div>
-            <span className="text-sm font-['Lexend_Zetta'] font-medium text-[var(--color-text)] min-w-[2rem] text-right">
-              {maxTransitTime}
-            </span>
-          </div>
-        </div>
       </div>
     </aside>
   )

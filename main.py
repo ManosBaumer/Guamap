@@ -51,7 +51,12 @@ def run_stage1(args: argparse.Namespace) -> None:
     deduped = dedupe_stops(raw)
     save_csv(get_data_path(STOPS_DEDUPED_CSV), deduped)
     logger.info("Deduplicated stops: %d -> %d", len(raw), len(deduped))
-    ensure_stop_lines(force=args.force_lines)
+    if args.force_lines:
+        logger.warning(
+            "Fetching stop lines uses Amap /v3/bus/stopname (strict daily quota). "
+            "Only run --force-lines when you intend to refresh cached line data."
+        )
+        ensure_stop_lines(force=True)
     ensure_transit_times(force=args.force_transit)
 
 
@@ -82,7 +87,11 @@ def main() -> int:
     parser.add_argument("--force-poi", action="store_true", help="Re-fetch POI stops")
     parser.add_argument("--force-transit", action="store_true", help="Re-fetch transit times")
     parser.add_argument("--force-districts", action="store_true", help="Re-fetch district polygons")
-    parser.add_argument("--force-lines", action="store_true", help="Re-fetch bus/metro lines per stop")
+    parser.add_argument(
+        "--force-lines",
+        action="store_true",
+        help="Re-fetch bus/metro lines per stop (Amap stopname API — strict quota; opt-in only)",
+    )
     parser.add_argument("--contours", action="store_true", default=True, help="Use isochrone contour bands (default)")
     parser.add_argument("--no-contours", action="store_false", dest="contours", help="Use heatmap instead of isochrones")
     parser.add_argument("--no-stops", action="store_true", help="Do not add transit stops layer to map")

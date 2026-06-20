@@ -8,7 +8,6 @@ export type MapLocationFilterOpts = {
   showAreasOutsideFourDistricts: boolean
   allDistrictsActive: boolean
   inactivePolygons: number[][][][]
-  maxTransitTime: number
 }
 
 function insideCoreFootprint(lat: number, lng: number, districts: FeatureCollection): boolean {
@@ -32,8 +31,6 @@ export function communityPassesMapFilters(c: Community, opts: MapLocationFilterO
   if (!opts.allDistrictsActive && insideInactiveDistrict(c.lat, c.lng, opts.inactivePolygons)) {
     return false
   }
-  const t = c.transitMin
-  if (t != null && t >= 0 && t > opts.maxTransitTime) return false
   return true
 }
 
@@ -44,6 +41,5 @@ export function stopPassesMapFilters(s: Stop, opts: MapLocationFilterOpts): bool
   if (!opts.allDistrictsActive && insideInactiveDistrict(s.lat, s.lon, opts.inactivePolygons)) {
     return false
   }
-  if (s.t != null && s.t >= 0 && s.t > opts.maxTransitTime) return false
   return true
 }

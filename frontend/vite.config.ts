@@ -1,9 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Connect } from 'vite'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { handleTransitRouteRequest } from './server/transitRouteHandler'
 
 /** Personal favourites: `data/saved_listings.json` (gitignored). Served only by dev/preview. */
 const SAVED_LISTINGS_FILE = path.resolve(__dirname, '../data/saved_listings.json')
@@ -78,8 +79,35 @@ function savedListingsFilePlugin() {
   }
 }
 
-export default defineConfig({
-  plugins: [react(), tailwindcss(), savedListingsFilePlugin()],
+function transitRouteApiMiddleware(amapKey: string): Connect.NextHandleFunction {
+  return (req, res, next) => {
+    const url = req.url?.split('?')[0] ?? ''
+    if (url !== '/api/transit-route') {
+      next()
+      return
+    }
+    void handleTransitRouteRequest(req, res, amapKey)
+  }
+}
+
+function transitRouteApiPlugin(amapKey: string) {
+  return {
+    name: 'guamap-transit-route-api',
+    configureServer(server: { middlewares: Connect.Server }) {
+      server.middlewares.use(transitRouteApiMiddleware(amapKey))
+    },
+    configurePreviewServer(server: { middlewares: Connect.Server }) {
+      server.middlewares.use(transitRouteApiMiddleware(amapKey))
+    },
+  }
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, path.resolve(__dirname, '..'), '')
+  const amapKey = env.AMAP_KEY ?? process.env.AMAP_KEY ?? ''
+
+  return {
+  plugins: [react(), tailwindcss(), savedListingsFilePlugin(), transitRouteApiPlugin(amapKey)],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -92,4 +120,5 @@ export default defineConfig({
   build: {
     sourcemap: false,
   },
+  }
 })

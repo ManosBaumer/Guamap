@@ -3,6 +3,9 @@
 # Data and cache (keep .gitkeep)
 data/*
 !data/.gitkeep
+!data/transit_route_cache/
+data/transit_route_cache/*
+!data/transit_route_cache/.gitkeep
 
 # Frontend (Vite / Node)
 frontend/node_modules/

@@ -37,11 +37,21 @@ DISTRICTS = [
 # Guangzhou citycode for transit API
 GUANGZHOU_CITYCODE = "020"
 
+# Guangzhou metro stop search bbox (GCJ-02): south, west, north, east — wider than core 4 districts.
+# Matches OSM metro extent plus margin for edge stations (番禺, 白云, 黄埔, 广佛 border).
+GUANGZHOU_METRO_STOP_BBOX = (22.82, 113.0, 23.58, 113.68)
+
 # POI search keywords for transit stops (bus + metro variants to overcome 200-result cap per query)
 POI_KEYWORDS = [
     "公交站", "公交车站", "公交站点", "公交站台",  # bus
     "巴士站", "公交枢纽",  # extra bus coverage for sparse areas
-    "地铁站",  # metro
+    "地铁站",  # metro (district queries)
+]
+
+# Extra metro-only keywords for bbox polygon search (200 cap per query × variants)
+METRO_POI_KEYWORDS = [
+    "地铁站",
+    "地铁",
 ]
 
 # Walking and spatial
