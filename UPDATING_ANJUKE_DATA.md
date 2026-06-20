@@ -22,6 +22,24 @@ Incremental refresh for Guangzhou rental communities and listings. **No transit 
 
 Raw scrape files are cached between workflow runs (not committed). First cloud run may take longer if the cache is empty.
 
+### Email notifications
+
+Add to `.env` (local) and **GitHub repository secrets** (cloud):
+
+| Variable | Example |
+|----------|---------|
+| `NOTIFY_EMAIL` | address that receives alerts |
+| `SMTP_USER` | sender login (Gmail address) |
+| `SMTP_PASSWORD` | Gmail **App Password** (not your normal password) |
+| `SMTP_HOST` | `smtp.gmail.com` (optional) |
+| `SMTP_PORT` | `587` (optional) |
+
+You get email on: refresh **started**, **success** (with counts), **cookie invalid**, **crash**, and GitHub Actions **workflow failure**.
+
+```bash
+python scripts/refresh_anjuke_listings.py --notify-test
+```
+
 ### Option C — CLI
 
 ```bash

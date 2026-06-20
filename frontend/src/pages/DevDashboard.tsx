@@ -285,10 +285,9 @@ export default function DevDashboard() {
                 <ExternalLink className="w-3.5 h-3.5" aria-hidden />
               </a>
               <p className="text-xs text-gray-500">
-                CLI:{' '}
-                <code className="bg-gray-100 px-1 rounded">
-                  python scripts/refresh_anjuke_listings.py --cookie &quot;…&quot;
-                </code>
+                Email alerts (start / success / crash): set SMTP vars in root{' '}
+                <code className="bg-gray-100 px-1 rounded">.env</code> — see{' '}
+                <code className="bg-gray-100 px-1 rounded">.env.example</code>.
               </p>
             </section>
           </>

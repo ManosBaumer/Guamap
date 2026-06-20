@@ -44,12 +44,27 @@ jobs:
       - name: Refresh Anjuke data (no transit)
         env:
           ANJUKE_COOKIE: ${{ inputs.anjuke_cookie || secrets.ANJUKE_COOKIE }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
         run: |
           if [ -z "$ANJUKE_COOKIE" ]; then
             echo "Set workflow input anjuke_cookie or repository secret ANJUKE_COOKIE"
             exit 1
           fi
           python scripts/refresh_anjuke_listings.py
+
+      - name: Notify on workflow failure
+        if: failure()
+        env:
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+        run: python -c "from utils.notify import notify; notify('GitHub Actions refresh failed', 'See Actions logs for details.', level='error')"
 
       - name: Commit updated frontend data
         run: |
