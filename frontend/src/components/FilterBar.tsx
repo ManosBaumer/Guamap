@@ -84,11 +84,22 @@ type FilterBarKey = (typeof FILTER_KEYS)[number]
 
 const FILTER_GAP_PX = 16
 
+function filterRowGapPx(hostWidth: number): number {
+  if (hostWidth >= 960) return 16
+  if (hostWidth >= 720) return 12
+  return 8
+}
+
 /** Lets DropdownItem close its parent after a single-select choice (metro/orient stay open). */
 const CloseFilterDropdownContext = createContext<() => void>(() => { })
 
+/** Uniform width for all filter pills (fits longest label: Amenities / Plot size). */
+const FILTER_PILL_WIDTH = 'w-[8rem]'
+/** Keep in sync with FILTER_PILL_WIDTH — used for overflow fit math (avoids flaky off-screen measure). */
+const FILTER_PILL_WIDTH_PX = 128
+
 const BTN_BASE =
-  'flex items-center gap-2 min-h-10 min-w-[9rem] px-3.5 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0'
+  `flex items-center gap-1.5 min-h-10 ${FILTER_PILL_WIDTH} px-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0`
 
 function Dropdown({
   icon,
@@ -124,8 +135,8 @@ function Dropdown({
           type="button"
           onClick={() => setOpen(!open)}
           className={`${BTN_BASE} ${isActive
-              ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)] border border-[var(--color-primary)]'
-              : 'bg-[var(--color-bg-pill)] text-[var(--color-text)] border border-transparent hover:border-[var(--color-border)]'
+            ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)] border border-[var(--color-primary)]'
+            : 'bg-[var(--color-bg-pill)] text-[var(--color-text)] border border-transparent hover:border-[var(--color-border)]'
             }`}
         >
           {icon}
@@ -184,8 +195,8 @@ function MetroLineToggle({ label, checked, onToggle }: { label: string; checked:
     >
       <span
         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] leading-none ${checked
-            ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white'
-            : 'border-[var(--color-border)] bg-white'
+          ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white'
+          : 'border-[var(--color-border)] bg-white'
           }`}
         aria-hidden
       >
@@ -215,7 +226,7 @@ function MoreMeasureTrigger() {
   return (
     <button type="button" tabIndex={-1} className={`${BTN_BASE} bg-[var(--color-bg-pill)] text-[var(--color-text)] border border-transparent`}>
       <SlidersHorizontal className="w-4 h-4 shrink-0" />
-      <span>More</span>
+      <span className="flex-1 text-left">More</span>
       <ChevronDown className="w-4 h-4 shrink-0" />
     </button>
   )
@@ -294,6 +305,7 @@ export default function FilterBar() {
   const moreMeasureRef = useRef<HTMLDivElement>(null)
   const clearMeasureRef = useRef<HTMLDivElement>(null)
   const [visibleCount, setVisibleCount] = useState<number>(FILTER_KEYS.length)
+  const [filterGapPx, setFilterGapPx] = useState(FILTER_GAP_PX)
 
   const toggleMetroLine = useCallback(
     (line: string) => {
@@ -327,56 +339,52 @@ export default function FilterBar() {
     const host = filtersHostRef.current
     if (!host) return
     const w = host.getBoundingClientRect().width
+    const gapPx = filterRowGapPx(w)
     const n = FILTER_KEYS.length
-    const widths = FILTER_KEYS.map((_, i) => itemMeasureRefs.current[i]?.getBoundingClientRect().width ?? 0)
-    const moreW = moreMeasureRef.current?.getBoundingClientRect().width ?? 120
+    const pillW = FILTER_PILL_WIDTH_PX
+    const moreW = pillW
     const clearW = clearMeasureRef.current?.getBoundingClientRect().width ?? 0
-    // Host row = filter pills + gap + optional Clear; space for pills only:
-    const availFilters = w - FILTER_GAP_PX - clearW
+    // Space for inline pills + optional More (reserve Clear + gap only when Clear is shown).
+    const avail =
+      w - (hasActiveFilters ? gapPx + clearW : 0)
 
     /** Pixel width of first `inlineCount` filter triggers + optional More (when inlineCount < n). */
     const rowTotal = (inlineCount: number): number => {
-      if (inlineCount >= n) {
-        let total = 0
-        for (let i = 0; i < n; i++) {
-          const wi = widths[i] > 8 ? widths[i] : 140
-          total += wi + (i > 0 ? FILTER_GAP_PX : 0)
-        }
-        return total
-      }
       if (inlineCount <= 0) return moreW
-      let total = 0
-      for (let i = 0; i < inlineCount; i++) {
-        const wi = widths[i] > 8 ? widths[i] : 140
-        total += wi + (i > 0 ? FILTER_GAP_PX : 0)
+      const pillsW = inlineCount * pillW
+      if (inlineCount >= n) {
+        return pillsW + (inlineCount - 1) * gapPx
       }
-      total += FILTER_GAP_PX + moreW
-      return total
+      return pillsW + inlineCount * gapPx + moreW
     }
 
-    const maxK = (avail: number) => {
-      for (let k = n; k >= 0; k--) {
-        if (rowTotal(k) <= avail) return k
+    let best = 0
+    for (let k = n; k >= 0; k--) {
+      if (rowTotal(k) <= avail + 1) {
+        best = k
+        break
       }
-      return 0
     }
 
-    const best = maxK(availFilters)
+    setFilterGapPx((g) => (g === gapPx ? g : gapPx))
     setVisibleCount((c) => (c === best ? c : best))
-  }, [])
+  }, [hasActiveFilters])
 
   useLayoutEffect(() => {
+    if (!anjukeLayerOn) return
     recalcVisible()
+    const raf = requestAnimationFrame(() => recalcVisible())
     const host = filtersHostRef.current
-    if (!host) return
+    if (!host) return () => cancelAnimationFrame(raf)
     const ro = new ResizeObserver(() => recalcVisible())
     ro.observe(host)
     window.addEventListener('resize', recalcVisible)
     return () => {
+      cancelAnimationFrame(raf)
       ro.disconnect()
       window.removeEventListener('resize', recalcVisible)
     }
-  }, [recalcVisible, hasActiveFilters])
+  }, [recalcVisible, hasActiveFilters, anjukeLayerOn])
 
   const visibleKeys = FILTER_KEYS.slice(0, visibleCount)
   const overflowKeys = FILTER_KEYS.slice(visibleCount)
@@ -821,7 +829,11 @@ export default function FilterBar() {
         </div>
       </div>
 
-      <div ref={filtersHostRef} className="flex flex-1 min-w-0 items-center gap-[16px] min-h-10">
+      <div
+        ref={filtersHostRef}
+        className="flex flex-1 min-w-0 items-center min-h-10"
+        style={{ gap: filterGapPx }}
+      >
         {anjukeLayerOn && visibleKeys.map((key) => (
           <div key={key} className="shrink-0">
             {renderInlineFilter(key)}
@@ -859,19 +871,17 @@ export default function FilterBar() {
         <button
           type="button"
           onClick={() => setTransitPlannerOpen(!transitPlannerOpen)}
-          className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${
-            transitPlannerOpen ? 'bg-[var(--color-primary-light)]' : 'hover:bg-gray-100'
-          }`}
+          className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${transitPlannerOpen ? 'bg-[var(--color-primary-light)]' : 'hover:bg-gray-100'
+            }`}
           title={transitPlannerOpen ? 'Close transit planner' : 'Plan public transit route'}
           aria-pressed={transitPlannerOpen}
           aria-label="Transit route planner"
         >
           <Route
-            className={`w-5 h-5 ${
-              transitPlannerOpen
+            className={`w-5 h-5 ${transitPlannerOpen
                 ? 'text-[var(--color-primary)]'
                 : 'text-[var(--color-text)]'
-            }`}
+              }`}
           />
         </button>
         <button
@@ -899,8 +909,8 @@ export default function FilterBar() {
         >
           <Star
             className={`w-5 h-5 ${savedMapViewActive
-                ? 'text-[var(--color-primary)] fill-[var(--color-primary)]'
-                : 'text-[var(--color-text)]'
+              ? 'text-[var(--color-primary)] fill-[var(--color-primary)]'
+              : 'text-[var(--color-text)]'
               }`}
           />
           {savedListings.length > 0 && (

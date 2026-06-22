@@ -41,9 +41,15 @@ export type TransitMapPoint = {
 
 export const TRANSIT_LEG_STYLES: Record<
   TransitLegKind,
-  { color: string; weight: number; opacity: number; dashArray?: string }
+  { color: string; weight: number; opacity: number; dashArray?: string; outlineColor?: string }
 > = {
-  walking: { color: '#06b6d4', weight: 5, opacity: 0.92, dashArray: '8 6' },
+  walking: {
+    color: '#67e8f9',
+    outlineColor: '#0e7490',
+    weight: 5,
+    opacity: 0.92,
+    dashArray: '8 6',
+  },
   bus: { color: '#2563eb', weight: 5, opacity: 0.92 },
   metro: { color: '#ea580c', weight: 6, opacity: 0.95 },
   railway: { color: '#7c3aed', weight: 5, opacity: 0.92 },

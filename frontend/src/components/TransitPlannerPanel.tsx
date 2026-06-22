@@ -570,7 +570,7 @@ export default function TransitPlannerPanel() {
                 </ol>
                 <div className="flex flex-wrap gap-3 pt-1 text-[10px] text-gray-500">
                   <span className="inline-flex items-center gap-1">
-                    <span className="w-3 h-1 rounded bg-cyan-500 opacity-90" /> Walk
+                    <span className="w-3 h-1 rounded bg-cyan-300 opacity-90" /> Walk
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <span className="w-3 h-1 rounded bg-blue-600" /> Bus
