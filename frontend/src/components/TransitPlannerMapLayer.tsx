@@ -97,19 +97,38 @@ function RouteLegPolylines({
   }
 
   if (!isTransitLegKind(leg.kind)) {
+    const outlineColor = style.outlineColor ?? darkenHexColor(style.color, 0.45)
+    const innerWeight = style.weight
+    const outlineWeight = innerWeight + 2
+    const dash = style.dashArray
+
     return (
-      <Polyline
-        key={legKey}
-        pane={pane}
-        {...shared}
-        pathOptions={{
-          ...shared.pathOptions,
-          color: style.color,
-          weight: style.weight,
-          opacity: style.opacity,
-          dashArray: style.dashArray,
-        }}
-      />
+      <>
+        <Polyline
+          key={`${legKey}-outline`}
+          pane={pane}
+          {...shared}
+          pathOptions={{
+            ...shared.pathOptions,
+            color: outlineColor,
+            weight: outlineWeight,
+            opacity: 1,
+            dashArray: dash,
+          }}
+        />
+        <Polyline
+          key={`${legKey}-fill`}
+          pane={pane}
+          {...shared}
+          pathOptions={{
+            ...shared.pathOptions,
+            color: style.color,
+            weight: innerWeight,
+            opacity: style.opacity,
+            dashArray: dash,
+          }}
+        />
+      </>
     )
   }
 

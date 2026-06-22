@@ -32,7 +32,7 @@ load_dotenv(ROOT / ".env")
 from data_collection.anjuke import run_scrape, test_cookie
 from anjuke_off_market import sync_off_market_after_scrape
 from prepare_frontend_data import prepare_anjuke
-from utils.github_progress import reset_retry_count
+from utils.github_progress import decompress_progress_archives, reset_retry_count
 from utils.notify import notify, notify_exception
 
 
@@ -46,6 +46,10 @@ def resolve_cookie(args: argparse.Namespace) -> str:
 
 
 def run_refresh(cookie: str, *, skip_prepare: bool) -> None:
+    n = decompress_progress_archives()
+    if n:
+        print(f"Restored {n} compressed progress file(s) from anjuke-scrape-cache")
+
     notify("Anjuke refresh started", level="info")
 
     print("\n=== Scraping Anjuke (no transit) ===")

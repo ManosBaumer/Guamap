@@ -84,8 +84,8 @@ function ListingCard({
     <div
       id={`guamap-listing-card-${listing.id}`}
       className={`bg-white rounded-[15px] overflow-hidden transition-shadow ${highlighted
-          ? 'ring-2 ring-black ring-offset-2 ring-offset-[var(--color-bg-card)] shadow-md'
-          : ''
+        ? 'ring-2 ring-black ring-offset-2 ring-offset-[var(--color-bg-card)] shadow-md'
+        : ''
         }`}
     >
       {/* Image grid */}
@@ -132,8 +132,8 @@ function ListingCard({
         >
           <Star
             className={`w-5 h-5 transition-colors ${saved
-                ? 'text-[var(--color-primary)] fill-[var(--color-primary)]'
-                : 'text-[var(--color-text)]'
+              ? 'text-[var(--color-primary)] fill-[var(--color-primary)]'
+              : 'text-[var(--color-text)]'
               }`}
           />
         </button>
@@ -221,8 +221,8 @@ function ListingCard({
                     <span
                       key={slug}
                       className={`px-1.5 py-0.5 text-[9px] rounded-md border leading-none transition-colors ${has
-                          ? 'bg-blue-50 text-blue-600 border-blue-300 font-medium'
-                          : 'bg-[var(--color-bg-card)] text-gray-300 border-gray-100'
+                        ? 'bg-blue-50 text-blue-600 border-blue-300 font-medium'
+                        : 'bg-[var(--color-bg-card)] text-gray-300 border-gray-100'
                         }`}
                     >
                       {label}
