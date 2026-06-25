@@ -118,7 +118,7 @@ export interface DistrictProperties {
 export type LayerName = 'stops' | 'heatmap' | 'metro' | 'baseMap' | 'anjuke' | 'compounds' | 'streetview'
 
 /** Shown when the Base map layer is on (default when enabling the layer: satellite). */
-export type BaseMapStyle = 'satellite' | 'grayscale' | 'dark' | 'positron' | 'topo' | 'voyager'
+export type BaseMapStyle = 'satellite' | 'hybrid'
 
 export type CompoundColorMode = 'none' | 'transit' | 'ratings'
 

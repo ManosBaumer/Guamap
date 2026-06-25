@@ -17,11 +17,7 @@ const LAYERS: { id: LayerName; label: string; icon: React.ReactNode }[] = [
 
 const BASE_MAP_STYLES: { id: BaseMapStyle; label: string; hint: string }[] = [
   { id: 'satellite', label: 'Satellite', hint: 'Esri imagery' },
-  { id: 'grayscale', label: 'Grayscale', hint: 'OSM + desaturate' },
-  { id: 'dark', label: 'Dark', hint: 'Carto dark' },
-  { id: 'positron', label: 'Light', hint: 'Carto Positron' },
-  { id: 'voyager', label: 'Voyager', hint: 'Carto color roads' },
-  { id: 'topo', label: 'Terrain', hint: 'OpenTopoMap' },
+  { id: 'hybrid', label: 'Hybrid', hint: 'Esri satellite + roads & places' },
 ]
 
 function LayerCard({ id, label, icon }: { id: LayerName; label: string; icon: React.ReactNode }) {

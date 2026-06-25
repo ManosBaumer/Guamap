@@ -12,6 +12,7 @@ import type {
 } from './types'
 import { persistSavedListingsToFile } from './savedListingsStorage'
 import { fetchTransitRoutes } from './transitRouteApi'
+import { pickRecommendedRoute } from './transitRouteSort'
 import {
   defaultDepartDate,
   defaultDepartTime,
@@ -144,6 +145,8 @@ interface AppState {
   transitLoading: boolean
   transitError: string | null
   transitCached: boolean
+  /** Stops layer value before route search auto-enabled it; restored when planner closes. */
+  transitStopsLayerSnapshot: boolean | null
   setTransitPlannerOpen: (open: boolean) => void
   setTransitPickOriginMode: (mode: 'none' | 'community' | 'map') => void
   setTransitPickDestinationMode: (mode: 'none' | 'community' | 'map') => void
@@ -453,11 +456,13 @@ export const useStore = create<AppState>((set, get) => ({
   transitLoading: false,
   transitError: null,
   transitCached: false,
+  transitStopsLayerSnapshot: null,
 
   setTransitPlannerOpen: (open) =>
     set((s) => {
       if (!open) {
         const returnPanel = s.transitReturnPanel
+        const stopsSnapshot = s.transitStopsLayerSnapshot
         return {
           transitPlannerOpen: false,
           transitReturnPanel: 'none',
@@ -466,6 +471,10 @@ export const useStore = create<AppState>((set, get) => ({
           transitRoutes: null,
           transitError: null,
           transitCached: false,
+          transitStopsLayerSnapshot: null,
+          ...(stopsSnapshot !== null
+            ? { layers: { ...s.layers, stops: stopsSnapshot } }
+            : {}),
           ...(returnPanel === 'saved' ? { savedMapViewActive: true } : {}),
         }
       }
@@ -479,6 +488,7 @@ export const useStore = create<AppState>((set, get) => ({
         transitReturnPanel,
         transitPickOriginMode: 'none',
         transitPickDestinationMode: 'none',
+        transitStopsLayerSnapshot: null,
         transitDepartDate: s.transitDepartDate || defaultDepartDate(),
         transitDepartTime: s.transitDepartTime || defaultDepartTime(),
       }
@@ -570,13 +580,16 @@ export const useStore = create<AppState>((set, get) => ({
         })
         return
       }
+      const current = get()
       set({
         transitLoading: false,
         transitRoutes: result.routes,
-        transitSelectedRouteIndex: 0,
+        transitSelectedRouteIndex: pickRecommendedRoute(result.routes).index,
         transitError: null,
         transitCached: result.cached,
-        layers: { ...get().layers, stops: true },
+        transitStopsLayerSnapshot:
+          current.transitStopsLayerSnapshot ?? current.layers.stops,
+        layers: { ...current.layers, stops: true },
       })
     } catch {
       set({

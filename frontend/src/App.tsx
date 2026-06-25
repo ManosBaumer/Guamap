@@ -4,6 +4,7 @@ import DevDashboard from '@/pages/DevDashboard'
 import { usePathname } from '@/hooks/usePathname'
 import { useStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
+import type { SavedListingSnapshot } from '@/lib/types'
 
 export default function App() {
   const pathname = usePathname()
@@ -35,21 +36,21 @@ export default function App() {
         .select('*')
         .eq('user_id', userId)
 
-      if (!error && data) {
-        setSavedListings(
-          data.map((row: {
-            listing: unknown
-            community_id: string
-            community_name: string
-            saved_at: string
-          }) => ({
-            listing: row.listing as Parameters<typeof setSavedListings>[0][number]['listing'],
-            communityId: row.community_id,
-            communityName: row.community_name,
-            savedAt: row.saved_at,
-          })),
-        )
-      }
+      if (error || !data) return
+
+      const snapshots: SavedListingSnapshot[] = data.map((row: {
+        listing: unknown
+        community_id: string
+        community_name: string
+        saved_at: string
+      }) => ({
+        listing: row.listing as SavedListingSnapshot['listing'],
+        communityId: row.community_id,
+        communityName: row.community_name,
+        savedAt: row.saved_at,
+      }))
+
+      setSavedListings(snapshots)
     }
 
     return () => subscription.unsubscribe()

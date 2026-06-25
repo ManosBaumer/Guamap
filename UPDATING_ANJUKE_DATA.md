@@ -49,12 +49,20 @@ pip install -r requirements-scrape.txt
 # Test cookie only
 ANJUKE_COOKIE='...' python scripts/refresh_anjuke_listings.py --test-cookie-only
 
-# Full refresh
+# Full refresh (active file = only what Anjuke returns this run)
 ANJUKE_COOKIE='...' python scripts/refresh_anjuke_listings.py
+
+# Same, but do not reuse cached detail rows from the old main file
+ANJUKE_COOKIE='...' python scripts/refresh_anjuke_listings.py --fresh
 
 # Re-export frontend JSON from existing raw files (no scrape)
 python scripts/refresh_anjuke_listings.py --prepare-only
+
+# Restore after a crash (from last local checkpoint)
+python scripts/restore_scrape_checkpoint.py
 ```
+
+**Local checkpoints:** every 10 communities (configurable via `GUAMAP_CHECKPOINT_EVERY`), files are copied to `data/scraping/checkpoints/latest/` and appended to `data/scraping/progress.log`. Resume state is also in `data/scraping/listings_state.json` and `data/scraping/anjuke_listings_new.jsonl`. On completion, **only this run's listings** replace `data/anjuke_listings_raw.jsonl` (the previous main is kept as `.bak` for off-market diff). Saved favourites in Supabase are synced by comparing to that active set.
 
 ---
 

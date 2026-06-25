@@ -18,8 +18,8 @@ import { useStore } from '@/lib/store'
 import { segmentKindEmoji } from '@/lib/transitRouteTypes'
 import { colorForMetroLineName } from '@/lib/guangzhouMetroLineColors'
 import {
-  findTransitRoute,
   sortTransitRoutes,
+  pickRecommendedRoute,
   TRANSIT_ROUTE_SORT_OPTIONS,
   type TransitRouteSortMode,
 } from '@/lib/transitRouteSort'
@@ -35,8 +35,78 @@ import {
 } from '@/lib/transitSegmentText'
 import { useTransitBreakdownTranslations } from '@/lib/useTransitBreakdownTranslations'
 import { loadScutLocation } from '@/lib/data'
+import type { TransitRoutePlan } from '@/lib/transitRouteTypes'
 
 type PickMode = 'none' | 'community' | 'map'
+
+function RouteBreakdown({
+  route,
+  breakdownLines,
+  showOriginalBreakdown,
+  onToggleOriginal,
+  canToggleOriginal,
+  translating,
+}: {
+  route: TransitRoutePlan
+  breakdownLines: string[]
+  showOriginalBreakdown: boolean
+  onToggleOriginal: () => void
+  canToggleOriginal: boolean
+  translating: boolean
+}) {
+  return (
+    <div className="px-3 pb-2.5 pt-2 border-t border-[var(--color-border)] bg-white space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Route breakdown</p>
+        {translating && (
+          <span className="text-[10px] text-gray-400 inline-flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
+            Translating…
+          </span>
+        )}
+        {canToggleOriginal && (
+          <button
+            type="button"
+            onClick={onToggleOriginal}
+            className="text-[10px] font-medium text-[var(--color-primary)] hover:underline cursor-pointer inline-flex items-center gap-1"
+          >
+            <Languages className="w-3 h-3" aria-hidden />
+            {showOriginalBreakdown ? 'See translation' : 'See original'}
+          </button>
+        )}
+      </div>
+      <ol className="space-y-2">
+        {route.segments.map((seg, i) => (
+          <li key={i} className="flex gap-2 text-xs text-[var(--color-text)]">
+            <span className="shrink-0" aria-hidden>
+              {segmentKindEmoji(seg.kind)}
+            </span>
+            {seg.kind === 'metro' && seg.line && (
+              <span
+                className="shrink-0 w-3 h-3 rounded-sm mt-0.5 border border-black/10"
+                style={{ background: colorForMetroLineName(seg.line) }}
+                title={seg.line}
+                aria-hidden
+              />
+            )}
+            <span>{breakdownLines[i] ?? formatTransitSegmentText(seg)}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap gap-3 pt-1 text-[10px] text-gray-500">
+        <span className="inline-flex items-center gap-1">
+          <span className="w-3 h-1 rounded bg-cyan-300 opacity-90" /> Walk
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-3 h-1 rounded bg-blue-600" /> Bus
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-3 h-1 rounded bg-teal-600" /> Tram
+        </span>
+      </div>
+    </div>
+  )
+}
 
 function EndpointPickers({
   pickMode,
@@ -190,7 +260,7 @@ function ExcludeModesDropdown({
 }
 
 export default function TransitPlannerPanel() {
-  const [routeSort, setRouteSort] = useState<TransitRouteSortMode>('fastest')
+  const [routeSort, setRouteSort] = useState<TransitRouteSortMode>('recommended')
   const [showOriginalBreakdown, setShowOriginalBreakdown] = useState(false)
   const [excludedModes, setExcludedModes] = useState<Set<TransitModeFilter>>(() => new Set())
 
@@ -260,11 +330,6 @@ export default function TransitPlannerPanel() {
     [filteredRoutes, routeSort],
   )
 
-  const selectedRoute = useMemo(
-    () => findTransitRoute(filteredRoutes, selectedIndex),
-    [filteredRoutes, selectedIndex],
-  )
-
   const { translatedByRoute, translating } = useTransitBreakdownTranslations(routes)
 
   const applyScutToOrigin = useCallback(async () => {
@@ -298,7 +363,10 @@ export default function TransitPlannerPanel() {
 
   useEffect(() => {
     setShowOriginalBreakdown(false)
-  }, [routes])
+    if (!routes?.length) return
+    setRouteSort('recommended')
+    setSelectedIndex(pickRecommendedRoute(routes).index)
+  }, [routes, setSelectedIndex])
 
   useEffect(() => {
     if (!displayRoutes?.length) return
@@ -321,16 +389,6 @@ export default function TransitPlannerPanel() {
     : 'Choose a community or map point'
 
   const canSearch = Boolean(origin && destination && !loading)
-  const breakdownOriginals = selectedRoute ? segmentTextsForRoute(selectedRoute) : []
-  const breakdownLines =
-    selectedRoute && !showOriginalBreakdown && translatedByRoute[selectedRoute.index]
-      ? translatedByRoute[selectedRoute.index]
-      : breakdownOriginals
-  const canToggleOriginal =
-    selectedRoute &&
-    routeBreakdownHasChinese(selectedRoute) &&
-    translatedByRoute[selectedRoute.index] &&
-    !translating
 
   return (
     <aside className="w-[383px] bg-white border-l border-[var(--color-border)] flex flex-col h-full overflow-hidden shrink-0">
@@ -499,88 +557,60 @@ export default function TransitPlannerPanel() {
             <div className="flex flex-col gap-2">
               {displayRoutes.map((route) => {
                 const active = route.index === selectedIndex
+                const breakdownOriginals = segmentTextsForRoute(route)
+                const breakdownLines =
+                  active && !showOriginalBreakdown && translatedByRoute[route.index]
+                    ? translatedByRoute[route.index]
+                    : breakdownOriginals
+                const canToggleOriginal =
+                  active &&
+                  routeBreakdownHasChinese(route) &&
+                  translatedByRoute[route.index] &&
+                  !translating
+
                 return (
-                  <button
+                  <div
                     key={route.index}
-                    type="button"
-                    onClick={() => setSelectedIndex(route.index)}
-                    className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors cursor-pointer ${
+                    className={`rounded-xl border overflow-hidden transition-colors ${
                       active
-                        ? 'border-[var(--color-primary)] bg-[var(--color-primary-light)]'
+                        ? 'border-[var(--color-primary)] bg-white'
                         : 'border-[var(--color-border)] bg-white hover:border-gray-300'
                     }`}
                   >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-lg font-semibold text-[var(--color-text)] tabular-nums">
-                        {route.durationMin} min
-                      </span>
-                      {route.cost > 0 && <span className="text-xs text-gray-500">¥{route.cost}</span>}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {route.numTransfers === 0
-                        ? 'Direct'
-                        : `${route.numTransfers} transfer${route.numTransfers === 1 ? '' : 's'}`}
-                      {route.walkingDistanceM > 0 && ` · ${Math.round(route.walkingDistanceM)} m walk`}
-                    </p>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIndex(route.index)}
+                      className={`w-full text-left px-3 py-2.5 cursor-pointer ${
+                        active ? 'bg-[var(--color-primary-light)]' : ''
+                      }`}
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-lg font-semibold text-[var(--color-text)] tabular-nums">
+                          {route.durationMin} min
+                        </span>
+                        {route.cost > 0 && <span className="text-xs text-gray-500">¥{route.cost}</span>}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {route.numTransfers === 0
+                          ? 'Direct'
+                          : `${route.numTransfers} transfer${route.numTransfers === 1 ? '' : 's'}`}
+                        {route.walkingDistanceM > 0 && ` · ${Math.round(route.walkingDistanceM)} m walk`}
+                      </p>
+                    </button>
+                    {active && (
+                      <RouteBreakdown
+                        route={route}
+                        breakdownLines={breakdownLines}
+                        showOriginalBreakdown={showOriginalBreakdown}
+                        onToggleOriginal={() => setShowOriginalBreakdown((v) => !v)}
+                        canToggleOriginal={canToggleOriginal}
+                        translating={translating}
+                      />
+                    )}
+                  </div>
                 )
               })}
             </div>
-
-            {selectedRoute && (
-              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-card)] px-3 py-2.5 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                    Route breakdown
-                  </p>
-                  {translating && (
-                    <span className="text-[10px] text-gray-400 inline-flex items-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
-                      Translating…
-                    </span>
-                  )}
-                  {canToggleOriginal && (
-                    <button
-                      type="button"
-                      onClick={() => setShowOriginalBreakdown((v) => !v)}
-                      className="text-[10px] font-medium text-[var(--color-primary)] hover:underline cursor-pointer inline-flex items-center gap-1"
-                    >
-                      <Languages className="w-3 h-3" aria-hidden />
-                      {showOriginalBreakdown ? 'See translation' : 'See original'}
-                    </button>
-                  )}
-                </div>
-                <ol className="space-y-2">
-                  {selectedRoute.segments.map((seg, i) => (
-                    <li key={i} className="flex gap-2 text-xs text-[var(--color-text)]">
-                      <span className="shrink-0" aria-hidden>
-                        {segmentKindEmoji(seg.kind)}
-                      </span>
-                      {seg.kind === 'metro' && seg.line && (
-                        <span
-                          className="shrink-0 w-3 h-3 rounded-sm mt-0.5 border border-black/10"
-                          style={{ background: colorForMetroLineName(seg.line) }}
-                          title={seg.line}
-                          aria-hidden
-                        />
-                      )}
-                      <span>{breakdownLines[i] ?? formatTransitSegmentText(seg)}</span>
-                    </li>
-                  ))}
-                </ol>
-                <div className="flex flex-wrap gap-3 pt-1 text-[10px] text-gray-500">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-3 h-1 rounded bg-cyan-300 opacity-90" /> Walk
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-3 h-1 rounded bg-blue-600" /> Bus
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-3 h-1 rounded bg-teal-600" /> Tram
-                  </span>
-                </div>
-              </div>
-            )}
               </>
             ) : (
               <p className="text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2">

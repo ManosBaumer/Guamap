@@ -27,7 +27,6 @@ import {
   loadHeatmapBounds, loadScutLocation, loadDistricts,
   heatmapRasterUrl, loadListings, loadListingsMetadata,
 } from '@/lib/data'
-import type { BaseMapStyle } from '@/lib/types'
 import {
   countMatchingListings,
   communityMatchesBuildYear,
@@ -123,124 +122,69 @@ function ratingToColor(r: number): string {
 
 const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+const ESRI_IMAGERY_URL =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const ESRI_IMAGERY_ATTRIBUTION =
+  'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+const ESRI_HYBRID_ROADS_URL =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}'
+const ESRI_HYBRID_PLACES_URL =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
+const ESRI_HYBRID_ATTRIBUTION =
+  `${ESRI_IMAGERY_ATTRIBUTION} &mdash; Reference: Esri, HERE, Garmin, FAO, NOAA, USGS`
 
-function basemapConfig(
-  baseMapOn: boolean,
-  style: BaseMapStyle,
-): {
-  key: string
-  url: string
-  attribution: string
-  maxZoom?: number
-  maxNativeZoom?: number
-} {
-  if (!baseMapOn) {
-    return {
-      key: 'std-osm',
-      url: OSM_TILE_URL,
-      attribution: OSM_ATTRIBUTION,
-      maxNativeZoom: MAP_MAX_ZOOM,
-      maxZoom: MAP_MAX_ZOOM,
-    }
-  }
-  switch (style) {
-    case 'grayscale':
-      return {
-        key: 'gray-osm',
-        url: OSM_TILE_URL,
-        attribution: OSM_ATTRIBUTION,
-        maxNativeZoom: MAP_MAX_ZOOM,
-        maxZoom: MAP_MAX_ZOOM,
-      }
-    case 'satellite':
-      return {
-        key: 'esri-sat',
-        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attribution:
-          'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-        maxNativeZoom: MAP_MAX_ZOOM,
-        maxZoom: MAP_MAX_ZOOM,
-      }
-    case 'dark':
-      return {
-        key: 'carto-dark',
-        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxNativeZoom: MAP_MAX_ZOOM,
-        maxZoom: MAP_MAX_ZOOM,
-      }
-    case 'positron':
-      return {
-        key: 'carto-light',
-        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxNativeZoom: MAP_MAX_ZOOM,
-        maxZoom: MAP_MAX_ZOOM,
-      }
-    case 'voyager':
-      return {
-        key: 'carto-voyager',
-        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxNativeZoom: MAP_MAX_ZOOM,
-        maxZoom: MAP_MAX_ZOOM,
-      }
-    case 'topo':
-      return {
-        key: 'opentopo',
-        url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-        attribution:
-          'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
-        maxZoom: 17,
-        maxNativeZoom: 17,
-      }
-    default:
-      return { key: 'std-osm', url: OSM_TILE_URL, attribution: OSM_ATTRIBUTION }
-  }
+const TILE_LAYER_OPTS = {
+  updateWhenZooming: false as const,
+  updateWhenIdle: true as const,
+  keepBuffer: 4,
+  maxNativeZoom: MAP_MAX_ZOOM,
+  maxZoom: MAP_MAX_ZOOM,
+}
+
+/** Esri reference tiles are empty past ~z15; upscale so roads/labels stay visible when zoomed in. */
+const HYBRID_OVERLAY_TILE_OPTS = {
+  ...TILE_LAYER_OPTS,
+  maxNativeZoom: 15,
 }
 
 function BasemapTileLayer() {
   const baseMapOn = useStore((s) => s.layers.baseMap)
   const baseMapStyle = useStore((s) => s.baseMapStyle)
-  const cfg = useMemo(
-    () => basemapConfig(baseMapOn, baseMapStyle),
-    [baseMapOn, baseMapStyle],
-  )
+
+  if (!baseMapOn) {
+    return (
+      <TileLayer
+        url={OSM_TILE_URL}
+        attribution={OSM_ATTRIBUTION}
+        {...TILE_LAYER_OPTS}
+      />
+    )
+  }
+
+  if (baseMapStyle === 'hybrid') {
+    return (
+      <>
+        <TileLayer
+          url={ESRI_IMAGERY_URL}
+          attribution={ESRI_HYBRID_ATTRIBUTION}
+          zIndex={1}
+          {...TILE_LAYER_OPTS}
+        />
+        <Pane name="guamapHybridOverlay" style={{ zIndex: 250 }}>
+          <TileLayer url={ESRI_HYBRID_ROADS_URL} zIndex={1} {...HYBRID_OVERLAY_TILE_OPTS} />
+          <TileLayer url={ESRI_HYBRID_PLACES_URL} zIndex={2} {...HYBRID_OVERLAY_TILE_OPTS} />
+        </Pane>
+      </>
+    )
+  }
 
   return (
     <TileLayer
-      key={cfg.key}
-      url={cfg.url}
-      attribution={cfg.attribution}
-      updateWhenZooming={false}
-      updateWhenIdle
-      keepBuffer={4}
-      {...(cfg.maxZoom != null ? { maxZoom: cfg.maxZoom } : {})}
-      {...(cfg.maxNativeZoom != null ? { maxNativeZoom: cfg.maxNativeZoom } : {})}
+      url={ESRI_IMAGERY_URL}
+      attribution={ESRI_IMAGERY_ATTRIBUTION}
+      {...TILE_LAYER_OPTS}
     />
   )
-}
-
-/** CSS grayscale filter on OSM tiles only (base map style “Grayscale”). */
-function BasemapGrayscaleClassSync() {
-  const map = useMap()
-  const baseMapOn = useStore((s) => s.layers.baseMap)
-  const baseMapStyle = useStore((s) => s.baseMapStyle)
-  const grayscaleCss = baseMapOn && baseMapStyle === 'grayscale'
-
-  useEffect(() => {
-    const container = map.getContainer()
-    if (grayscaleCss) {
-      container.classList.add('grayscale-tiles')
-    } else {
-      container.classList.remove('grayscale-tiles')
-    }
-    return () => {
-      container.classList.remove('grayscale-tiles')
-    }
-  }, [map, grayscaleCss])
-
-  return null
 }
 
 const DISTRICT_MASK_PANE = 'districtClipMask'
@@ -1192,6 +1136,9 @@ export default function MapView() {
   const sort = useStore((s) => s.sort)
   const selectCommunity = useStore((s) => s.selectCommunity)
   const setSavedMapViewActive = useStore((s) => s.setSavedMapViewActive)
+  const baseMapOn = useStore((s) => s.layers.baseMap)
+  const baseMapStyle = useStore((s) => s.baseMapStyle)
+  const basemapKey = baseMapOn ? baseMapStyle : 'osm'
   const streetviewPmtilesUrl = `${import.meta.env.BASE_URL}data/lines_${streetviewProvider}.pmtiles`
   const mapSnapshotRef = useRef<{ center: L.LatLngExpression; zoom: number }>({
     center: GUANGZHOU_CENTER,
@@ -1329,8 +1276,10 @@ export default function MapView() {
         img.leaflet-tile {
           background-color: #e5e7eb;
         }
-        /* Only base map tiles — not heatmap ImageOverlay or other overlay-pane rasters */
-        .grayscale-tiles .leaflet-tile-pane img { filter: grayscale(100%); }
+        /* Transparent hybrid overlays must not paint the gray tile gap color over satellite */
+        .leaflet-guamapHybridOverlay-pane img.leaflet-tile {
+          background-color: transparent !important;
+        }
         /* Leaflet’s default .leaflet-div-icon is white box + border — breaks our badge layout & centering */
         .leaflet-div-icon.guamap-community-marker {
           background: transparent !important;
@@ -1390,10 +1339,9 @@ export default function MapView() {
               <LeafletTunedWheelZoom />
               <TransitPlannerMapLayer />
               <MapZoomButtons portalEl={zoomControlsEl} />
-              <BasemapTileLayer />
+              <BasemapTileLayer key={basemapKey} />
 
               <LeafletMoveSync />
-              <BasemapGrayscaleClassSync />
 
               <HeatmapOverlay gridBounds={heatmapBounds} />
               {metroData && <MetroLayer data={metroData} />}

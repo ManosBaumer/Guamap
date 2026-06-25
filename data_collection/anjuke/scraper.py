@@ -21,7 +21,13 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from utils.github_progress import maybe_push_github_progress, push_scrape_progress
+from utils.scrape_checkpoint import maybe_checkpoint, push_checkpoint
+from utils.scrape_listings_io import (
+    append_listings,
+    load_existing_listings,
+    merge_listings_into_main,
+    save_json_atomic,
+)
 DATA_DIR = ROOT / "data"
 SCRAPING_DIR = DATA_DIR / "scraping"
 
@@ -88,28 +94,7 @@ def load_json(path: Path, default):
 
 
 def save_json(path: Path, data) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
-def load_existing_listings() -> dict[str, dict]:
-    existing: dict[str, dict] = {}
-    if not LISTINGS_FILE.exists():
-        return existing
-    print(f"Loading existing listings from {LISTINGS_FILE}...")
-    with LISTINGS_FILE.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                data = json.loads(line)
-                existing[str(data["id"])] = data
-            except (json.JSONDecodeError, KeyError, TypeError):
-                pass
-    print(f"Loaded {len(existing)} existing listings.")
-    return existing
+    save_json_atomic(path, data)
 
 
 def gettoken(ver: str, tk: str) -> str:
@@ -221,7 +206,7 @@ def fetch_blocks(base_params: dict):
         time.sleep(0.3)
 
     save_json(BLOCKS_CACHE, all_blocks)
-    push_scrape_progress("blocks fetched")
+    push_checkpoint("blocks fetched")
     return all_blocks
 
 
@@ -317,14 +302,14 @@ def fetch_communities(all_blocks: dict, base_params: dict):
                 },
             )
             print(f"    [{block['name']}] +{block_new} new ({len(all_communities)} total)")
-            maybe_push_github_progress(
+            maybe_checkpoint(
                 f"communities progress ({len(completed_blocks)} blocks done)",
             )
 
     state["_completed"] = True
     save_json(COMMUNITIES_STATE, state)
     save_json(COMMUNITIES_CACHE, all_communities)
-    push_scrape_progress(f"communities complete ({len(all_communities)} total)")
+    push_checkpoint(f"communities complete ({len(all_communities)} total)")
     return all_communities
 
 
@@ -348,12 +333,19 @@ def fetch_listing_detail(prop_id: str, base_params: dict) -> dict:
     }
 
 
-def fetch_all_listings(all_communities: dict, base_params: dict) -> int:
+def fetch_all_listings(all_communities: dict, base_params: dict, *, fresh: bool = False) -> int:
     state = load_json(LISTINGS_STATE, {"fetched_communities": []})
     fetched_communities = set(state["fetched_communities"])
-    existing_listings = load_existing_listings()
 
-    if not fetched_communities and LISTINGS_FILE_NEW.exists():
+    if fresh and not fetched_communities:
+        print("Fresh scrape: ignoring previous main listings file.")
+        if LISTINGS_FILE_NEW.exists():
+            LISTINGS_FILE_NEW.unlink()
+        existing_listings: dict[str, dict] = {}
+    else:
+        existing_listings = load_existing_listings()
+
+    if not fetched_communities and not fresh and LISTINGS_FILE_NEW.exists():
         LISTINGS_FILE_NEW.unlink()
 
     communities = list(all_communities.items())
@@ -441,37 +433,29 @@ def fetch_all_listings(all_communities: dict, base_params: dict) -> int:
             page += 1
             time.sleep(0.2)
 
-        with LISTINGS_FILE_NEW.open("a", encoding="utf-8") as f:
-            for listing in community_listings:
-                f.write(json.dumps(listing, ensure_ascii=False) + "\n")
+        append_listings(LISTINGS_FILE_NEW, community_listings)
 
         total_saved += len(community_listings)
         fetched_communities.add(cid)
         save_json(LISTINGS_STATE, {"fetched_communities": list(fetched_communities)})
         print(f"    saved {len(community_listings)} listings (running total: ~{total_saved})")
-        maybe_push_github_progress(
+        maybe_checkpoint(
             f"listings progress ({len(fetched_communities)}/{total_communities} communities)",
         )
 
-    bak_file = Path(str(LISTINGS_FILE) + ".bak")
-    if LISTINGS_FILE.exists():
-        if bak_file.exists():
-            bak_file.unlink()
-        LISTINGS_FILE.rename(bak_file)
-
-    if LISTINGS_FILE_NEW.exists():
-        LISTINGS_FILE_NEW.rename(LISTINGS_FILE)
+    total_unique = merge_listings_into_main()
+    print(f"Merged {total_unique} unique listings into {LISTINGS_FILE}")
 
     if LISTINGS_STATE.exists():
         LISTINGS_STATE.unlink()
     if COMMUNITIES_STATE.exists():
         COMMUNITIES_STATE.unlink()
 
-    push_scrape_progress(f"listings scrape complete (~{total_saved} rows in new file)")
-    return total_saved
+    push_checkpoint(f"listings scrape complete ({total_unique} unique listings)")
+    return total_unique
 
 
-def run_scrape(cookie: str) -> int:
+def run_scrape(cookie: str, *, fresh: bool = False) -> int:
     """Scrape blocks, communities, and active listings. Returns listing count."""
     configure_cookie(cookie)
     et, bst = get_session_params()
@@ -498,7 +482,7 @@ def run_scrape(cookie: str) -> int:
     print(f"\nTotal unique communities: {len(all_communities)}")
 
     print("\n=== Level 3+4: Fetching listings + details ===")
-    total = fetch_all_listings(all_communities, base_params)
+    total = fetch_all_listings(all_communities, base_params, fresh=fresh)
 
     print("\n=== Scrape done ===")
     print(f"Total active listings saved: {total}")

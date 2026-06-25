@@ -108,6 +108,8 @@ jobs:
 
           GUAMAP_PROGRESS_EVERY: "25"
           PYTHONUNBUFFERED: "1"
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
         run: |
 

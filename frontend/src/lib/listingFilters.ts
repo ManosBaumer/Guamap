@@ -46,8 +46,16 @@ export function filtersAreActive(filters: Filters): boolean {
 }
 
 /** Anjuke delisted listings are tagged in the title. */
+export const OFF_MARKET_TAG = '【已下架】'
+
+export function tagOffMarketTitle(title: string): string {
+  const trimmed = (title || '').trim()
+  if (trimmed.includes(OFF_MARKET_TAG)) return trimmed
+  return trimmed ? `${OFF_MARKET_TAG}${trimmed}` : OFF_MARKET_TAG
+}
+
 export function isListingOffMarket(listing: Listing): boolean {
-  return listing.title.includes('【已下架】')
+  return listing.title.includes(OFF_MARKET_TAG)
 }
 
 /** Same rules as ListingPanel filterAndSort (filter stage only). */
