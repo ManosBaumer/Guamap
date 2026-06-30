@@ -1,10 +1,11 @@
-import { Compass, TrainFront, Bed, Bath, Paintbrush, Languages, Home, Star, MapPin, Sparkles, ChevronDown, Share2 } from 'lucide-react'
+import { Compass, TrainFront, Bed, Bath, Paintbrush, Languages, Home, Star, MapPin, Sparkles, ChevronDown } from 'lucide-react'
 import { memo, useState } from 'react'
 import { useStore } from '@/lib/store'
 import { ajkImgUrl, ajkThumbUrl, ajkListingUrl, translateText } from '@/lib/data'
 import type { Listing } from '@/lib/types'
 import { listingBedCount, listingBathCount } from '@/lib/listingLayout'
-import { buildListingShareUrl, copyOrShareUrl } from '@/lib/listingShare'
+import { buildListingShareUrl } from '@/lib/listingShare'
+import ShareLinkButton from '@/components/ShareLinkButton'
 import {
   orientLabelEn,
   rentTypeLabelEn,
@@ -51,15 +52,9 @@ function ListingCard({
   const [showTranslation, setShowTranslation] = useState(false)
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false)
 
-  const handleShare = async () => {
-    if (!communityId) return
-    const url = buildListingShareUrl({ listing, communityId, communityName })
-    try {
-      await copyOrShareUrl(url, listing.title)
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return
-    }
-  }
+  const shareUrl = communityId
+    ? buildListingShareUrl({ listing, communityId, communityName })
+    : ''
 
   const hashes = listing.imgHashes || []
   /** Full-res URLs for modal (600×600). */
@@ -118,7 +113,7 @@ function ListingCard({
       )}
 
       {/* Title */}
-      <div className="px-4 pt-3 pb-1 flex gap-2 items-start">
+      <div className="px-4 pt-3 pb-1 flex gap-1.5 items-center">
         <p className="text-sm font-medium text-[var(--color-text)] leading-snug line-clamp-2 flex-1 min-w-0">
           {listing.title.includes('【已下架】') ? (
             <>
@@ -136,28 +131,25 @@ function ListingCard({
           onClick={() =>
             toggleSavedListing({ listing, communityId, communityName })
           }
-          className="shrink-0 w-8 h-8 -mt-0.5 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
+          className="shrink-0 w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors touch-manipulation"
           title={saved ? 'Remove from saved' : 'Save listing'}
           aria-label={saved ? 'Remove from saved' : 'Save listing'}
           aria-pressed={saved}
         >
           <Star
-            className={`w-5 h-5 transition-colors ${saved
+            className={`w-5 h-5 transition-colors pointer-events-none ${saved
               ? 'text-[var(--color-primary)] fill-[var(--color-primary)]'
               : 'text-[var(--color-text)]'
               }`}
           />
         </button>
-        <button
-          type="button"
-          onClick={() => void handleShare()}
+        <ShareLinkButton
+          url={shareUrl}
+          title={listing.title}
           disabled={!communityId}
-          className="shrink-0 w-8 h-8 -mt-0.5 -mr-1 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Share listing link"
-          aria-label="Share listing link"
-        >
-          <Share2 className="w-[18px] h-[18px] text-[var(--color-text)]" />
-        </button>
+          className="shrink-0 w-9 h-9 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed touch-manipulation"
+          iconClassName="w-[18px] h-[18px] text-[var(--color-text)] pointer-events-none"
+        />
       </div>
       {showTranslation && translatedTitle && (
         <div className="px-4 pb-1">

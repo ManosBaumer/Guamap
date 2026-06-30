@@ -179,10 +179,36 @@ export function decodeListingShareSnapshot(encoded: string): ListingShareSnapsho
   }
 }
 
+export function copyTextToClipboardSync(text: string): void {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.setAttribute('readonly', '')
+  ta.style.position = 'fixed'
+  ta.style.left = '0'
+  ta.style.top = '0'
+  ta.style.opacity = '0'
+  ta.style.pointerEvents = 'none'
+  document.body.appendChild(ta)
+  ta.focus()
+  ta.select()
+  ta.setSelectionRange(0, text.length)
+  const ok = document.execCommand('copy')
+  document.body.removeChild(ta)
+  if (!ok) throw new Error('copy_failed')
+}
+
 export async function copyOrShareUrl(url: string, title: string): Promise<'shared' | 'copied'> {
+  const cleanTitle = title.replace(/【已下架】/g, '').trim()
+
+  // HTTP LAN dev (e.g. phone on 192.168.x.x) — copy synchronously while the tap gesture is active.
+  if (!window.isSecureContext) {
+    copyTextToClipboardSync(url)
+    return 'copied'
+  }
+
   if (typeof navigator.share === 'function') {
     try {
-      await navigator.share({ title: title.replace(/【已下架】/g, '').trim(), url })
+      await navigator.share({ title: cleanTitle, url })
       return 'shared'
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -190,6 +216,17 @@ export async function copyOrShareUrl(url: string, title: string): Promise<'share
       }
     }
   }
-  await navigator.clipboard.writeText(url)
+
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(url)
+      return 'copied'
+    } catch {
+      copyTextToClipboardSync(url)
+      return 'copied'
+    }
+  }
+
+  copyTextToClipboardSync(url)
   return 'copied'
 }

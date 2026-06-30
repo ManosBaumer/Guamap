@@ -8,6 +8,7 @@ import { METRO_LINE_OPTIONS, sortMetroSelection } from '@/lib/metroFilterOptions
 import { listingFiltersAreActive } from '@/lib/listingFilters'
 import { isDevAdmin } from '@/lib/devAccess'
 import { navigateTo } from '@/hooks/usePathname'
+import { TOP_CHROME_ID } from '@/hooks/useTopChromeHeight'
 import {
   useState,
   useRef,
@@ -278,6 +279,8 @@ export default function FilterBar() {
       setTransitPlannerOpen: s.setTransitPlannerOpen,
     })),
   )
+
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   const previousCountRef = useRef(shownListingCount)
   useEffect(() => {
@@ -782,8 +785,95 @@ export default function FilterBar() {
     )
   }
 
+  const transitButton = (
+    <button
+      type="button"
+      onClick={() => setTransitPlannerOpen(!transitPlannerOpen)}
+      className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${transitPlannerOpen ? 'bg-[var(--color-primary-light)]' : 'hover:bg-gray-100'
+        }`}
+      title={transitPlannerOpen ? 'Close transit planner' : 'Plan public transit route'}
+      aria-pressed={transitPlannerOpen}
+      aria-label="Transit route planner"
+    >
+      <Route
+        className={`w-5 h-5 ${transitPlannerOpen
+          ? 'text-[var(--color-primary)]'
+          : 'text-[var(--color-text)]'
+          }`}
+      />
+    </button>
+  )
+
+  const savedButton = (
+    <button
+      type="button"
+      onClick={handleSavedClick}
+      className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${savedMapViewActive ? 'bg-[var(--color-primary-light)]' : 'hover:bg-gray-100'
+        }`}
+      title={
+        transitPlannerOpen
+          ? savedMapViewActive
+            ? 'Show communities on map (transit planner stays open)'
+            : 'Show saved listings on map (transit planner stays open)'
+          : savedMapViewActive
+            ? 'Exit saved listings view'
+            : 'Show saved listings on map'
+      }
+      aria-pressed={savedMapViewActive}
+      aria-label={
+        savedMapViewActive
+          ? 'Exit saved listings view'
+          : savedListings.length
+            ? `Show ${savedListings.length} saved listings on the map`
+            : 'Saved listings (none saved yet)'
+      }
+    >
+      <Star
+        className={`w-5 h-5 ${savedMapViewActive
+          ? 'text-[var(--color-primary)] fill-[var(--color-primary)]'
+          : 'text-[var(--color-text)]'
+          }`}
+      />
+      {savedListings.length > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-0.5 rounded-full bg-[var(--color-primary)] text-white text-[9px] font-bold flex items-center justify-center tabular-nums leading-none pointer-events-none ring-2 ring-white">
+          {savedListings.length > 99 ? '99+' : savedListings.length}
+        </span>
+      )}
+    </button>
+  )
+
+  const devButton = isDevAdmin(user) ? (
+    <button
+      type="button"
+      onClick={() => navigateTo('/dev')}
+      className="relative hidden lg:flex w-9 h-9 items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 hover:bg-gray-100"
+      title="Listing refresh"
+    >
+      <Wrench className="w-5 h-5 text-[var(--color-text)]" />
+    </button>
+  ) : null
+
+  const accountButton = (
+    <button
+      type="button"
+      onClick={async () => {
+        if (user) {
+          await supabase.auth.signOut()
+        } else {
+          setAuthModalOpen(true)
+        }
+      }}
+      className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 hover:bg-gray-100"
+      title={user ? 'Logout' : 'Login / Register'}
+    >
+      {user ? <LogOut className="w-5 h-5 " /> : <User className="w-5 h-5 " />}
+    </button>
+  )
+
   return (
-    <header className="relative z-50 min-h-[69px] bg-white border-b border-[var(--color-border)] flex items-center px-6 shrink-0 gap-[16px]">
+    <>
+    <header id={TOP_CHROME_ID} className="relative z-50 bg-white border-b border-[var(--color-border)] shrink-0 overflow-visible">
+    <div className="hidden lg:flex lg:items-center min-h-[69px] px-6 gap-[16px]">
       <div className="flex items-center gap-1.5 mr-2 shrink-0">
         <span className="font-['Lexend_Zetta'] text-2xl text-[var(--color-text)]">GUAMAP</span>
         <img src="/logo.png" alt="" className="w-[22px] h-[22px] object-contain ml-2.5 mr-5" />
@@ -868,84 +958,84 @@ export default function FilterBar() {
         )}
       </div>
       <div className="flex items-center gap-[16px] shrink-0">
-        <button
-          type="button"
-          onClick={() => setTransitPlannerOpen(!transitPlannerOpen)}
-          className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${transitPlannerOpen ? 'bg-[var(--color-primary-light)]' : 'hover:bg-gray-100'
-            }`}
-          title={transitPlannerOpen ? 'Close transit planner' : 'Plan public transit route'}
-          aria-pressed={transitPlannerOpen}
-          aria-label="Transit route planner"
-        >
-          <Route
-            className={`w-5 h-5 ${transitPlannerOpen
-                ? 'text-[var(--color-primary)]'
-                : 'text-[var(--color-text)]'
-              }`}
-          />
-        </button>
-        <button
-          type="button"
-          onClick={handleSavedClick}
-          className={`relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${savedMapViewActive ? 'bg-[var(--color-primary-light)]' : 'hover:bg-gray-100'
-            }`}
-          title={
-            transitPlannerOpen
-              ? savedMapViewActive
-                ? 'Show communities on map (transit planner stays open)'
-                : 'Show saved listings on map (transit planner stays open)'
-              : savedMapViewActive
-                ? 'Exit saved listings view'
-                : 'Show saved listings on map'
-          }
-          aria-pressed={savedMapViewActive}
-          aria-label={
-            savedMapViewActive
-              ? 'Exit saved listings view'
-              : savedListings.length
-                ? `Show ${savedListings.length} saved listings on the map`
-                : 'Saved listings (none saved yet)'
-          }
-        >
-          <Star
-            className={`w-5 h-5 ${savedMapViewActive
-              ? 'text-[var(--color-primary)] fill-[var(--color-primary)]'
-              : 'text-[var(--color-text)]'
-              }`}
-          />
-          {savedListings.length > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--color-primary)] text-white text-[10px] font-bold flex items-center justify-center tabular-nums leading-none">
-              {savedListings.length > 99 ? '99+' : savedListings.length}
-            </span>
-          )}
-        </button>
+        {transitButton}
+        {savedButton}
+        {devButton}
+        {accountButton}
+      </div>
+    </div>
 
-        {isDevAdmin(user) && (
+    {/* Compact header (tablet portrait + phones) */}
+    <div className="flex lg:hidden items-center justify-between gap-2 px-3 h-14 overflow-visible">
+      <img src="/logo.png" alt="GUAMAP" className="w-7 h-7 object-contain shrink-0" />
+
+      <div className="flex items-center gap-1.5 overflow-x-auto overflow-y-visible no-scrollbar py-1">
+        {anjukeLayerOn && (
           <button
             type="button"
-            onClick={() => navigateTo('/dev')}
-            className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 hover:bg-gray-100"
-            title="Listing refresh"
+            onClick={() => setMobileFiltersOpen(true)}
+            className={`relative flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium cursor-pointer whitespace-nowrap shrink-0 transition-colors ${hasActiveFilters
+              ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)] border border-[var(--color-primary)]'
+              : 'bg-[var(--color-bg-pill)] text-[var(--color-text)] border border-transparent'
+              }`}
           >
-            <Wrench className="w-5 h-5 text-[var(--color-text)]" />
+            <SlidersHorizontal className="w-4 h-4 shrink-0" />
+            Filters
+            {hasActiveFilters && (
+              <span className={`bg-[var(--color-primary)] text-white px-1.5 py-0.5 rounded-md text-[10px] tabular-nums font-brand leading-none transition-opacity ${listingsCountLoading ? 'opacity-50' : ''}`}>
+                <NumberFlow value={displayCount} />
+              </span>
+            )}
           </button>
         )}
-
-        <button
-          type="button"
-          onClick={async () => {
-            if (user) {
-              await supabase.auth.signOut()
-            } else {
-              setAuthModalOpen(true)
-            }
-          }}
-          className="relative w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 hover:bg-gray-100"
-          title={user ? 'Logout' : 'Login / Register'}
-        >
-          {user ? <LogOut className="w-5 h-5 " /> : <User className="w-5 h-5 " />}
-        </button>
+        {transitButton}
+        {savedButton}
+        {accountButton}
       </div>
+    </div>
     </header>
+
+    {/* Full-screen filter sheet (tablet portrait + phones) */}
+    {mobileFiltersOpen && (
+      <div className="lg:hidden fixed inset-0 z-[1500] bg-white flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] shrink-0">
+          <h2 className="text-lg font-semibold text-[var(--color-text)]">Filters</h2>
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen(false)}
+            className="w-9 h-9 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer"
+            aria-label="Close filters"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+          {FILTER_KEYS.map((key) => renderOverflowSection(key))}
+        </div>
+
+        <div className="border-t border-[var(--color-border)] px-4 py-3 flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="text-sm font-medium text-gray-500 hover:text-[var(--color-text)] transition-colors cursor-pointer px-2 py-2"
+          >
+            Clear all
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen(false)}
+            className="ml-auto flex-1 flex items-center justify-center gap-2 rounded-xl bg-[var(--color-text)] text-white py-3 text-sm font-medium cursor-pointer hover:bg-black/85 transition-colors"
+          >
+            Show
+            <span className={`bg-white/20 px-2 py-0.5 rounded-md text-xs tabular-nums font-brand transition-opacity ${listingsCountLoading ? 'opacity-50' : ''}`}>
+              <NumberFlow value={displayCount} />
+            </span>
+            listings
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   )
 }

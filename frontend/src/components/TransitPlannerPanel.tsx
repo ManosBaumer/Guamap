@@ -36,6 +36,7 @@ import {
 import { useTransitBreakdownTranslations } from '@/lib/useTransitBreakdownTranslations'
 import { loadScutLocation } from '@/lib/data'
 import type { TransitRoutePlan } from '@/lib/transitRouteTypes'
+import ResponsiveAsidePanel from './ResponsiveAsidePanel'
 
 type PickMode = 'none' | 'community' | 'map'
 
@@ -391,7 +392,7 @@ export default function TransitPlannerPanel() {
   const canSearch = Boolean(origin && destination && !loading)
 
   return (
-    <aside className="w-[383px] bg-white border-l border-[var(--color-border)] flex flex-col h-full overflow-hidden shrink-0">
+    <ResponsiveAsidePanel panelKey="transit">
       <div className="px-5 pt-4 pb-3 border-b border-[var(--color-border)]">
         <button
           type="button"
@@ -620,6 +621,6 @@ export default function TransitPlannerPanel() {
           </div>
         )}
       </div>
-    </aside>
+    </ResponsiveAsidePanel>
   )
 }

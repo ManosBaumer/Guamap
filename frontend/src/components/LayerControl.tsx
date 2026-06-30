@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Map, Flame, TrainFront, Layers, Home, Building, Camera } from 'lucide-react'
+import { Map, Flame, TrainFront, Layers, Home, Building, Camera, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useStore } from '@/lib/store'
+import { useTopChromeHeight } from '@/hooks/useTopChromeHeight'
 import { loadDistricts } from '@/lib/data'
 import type { LayerName, CompoundColorMode, BaseMapStyle } from '@/lib/types'
 
@@ -319,39 +320,72 @@ function DistrictSelector() {
 }
 
 export default function LayerControl() {
-  return (
-    <aside className="w-64 bg-white border-r border-[var(--color-border)] flex flex-col h-full overflow-hidden shrink-0">
-      <div className="px-4 pt-4 pb-2">
-        <h2 className="text-xl font-semibold text-[var(--color-text)]">Map Layers</h2>
-      </div>
+  const layerControlOpen = useStore((s) => s.layerControlOpen)
+  const setLayerControlOpen = useStore((s) => s.setLayerControlOpen)
+  const topChrome = useTopChromeHeight()
+  const overlayTopStyle = topChrome > 0 ? { top: topChrome } : undefined
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="flex flex-col gap-2">
-          {LAYERS.map((layer) => (
-            <div key={layer.id}>
-              {layer.id === 'baseMap' ? (
-                <LayerCardWithOptions id="baseMap" label={layer.label} icon={layer.icon}>
-                  <BaseMapOptionsInner />
-                </LayerCardWithOptions>
-              ) : layer.id === 'compounds' ? (
-                <LayerCardWithOptions id="compounds" label={layer.label} icon={layer.icon}>
-                  <CompoundOptionsInner />
-                </LayerCardWithOptions>
-              ) : layer.id === 'streetview' ? (
-                <LayerCardWithOptions id="streetview" label={layer.label} icon={layer.icon}>
-                  <StreetviewOptionsInner />
-                </LayerCardWithOptions>
-              ) : (
-                <LayerCard {...layer} />
-              )}
-            </div>
-          ))}
+  return (
+    <>
+      {/* Backdrop — map area only (below top bar), phones + tablets. */}
+      {layerControlOpen && (
+        <div
+          className="lg:hidden fixed inset-x-0 bottom-0 z-[1290] bg-black/40"
+          style={overlayTopStyle}
+          onClick={() => setLayerControlOpen(false)}
+          aria-hidden
+        />
+      )}
+      <aside
+        className={`
+          fixed left-0 bottom-0 z-[1300] w-72 max-w-[85vw] bg-white flex flex-col overflow-hidden
+          shadow-2xl transition-transform duration-300 ease-out
+          ${layerControlOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:static lg:inset-auto lg:top-auto lg:bottom-auto lg:z-auto lg:translate-x-0 lg:transition-none lg:shadow-none
+          lg:w-64 lg:h-full lg:shrink-0 lg:border-r lg:border-[var(--color-border)]
+        `}
+        style={overlayTopStyle}
+      >
+        <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-[var(--color-text)]">Map Layers</h2>
+          <button
+            type="button"
+            onClick={() => setLayerControlOpen(false)}
+            className="lg:hidden w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer"
+            aria-label="Close map layers"
+          >
+            <X className="w-4 h-4 text-gray-400" />
+          </button>
         </div>
 
-        <div className="my-4 border-t border-[var(--color-border)]" />
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
+          <div className="flex flex-col gap-2">
+            {LAYERS.map((layer) => (
+              <div key={layer.id}>
+                {layer.id === 'baseMap' ? (
+                  <LayerCardWithOptions id="baseMap" label={layer.label} icon={layer.icon}>
+                    <BaseMapOptionsInner />
+                  </LayerCardWithOptions>
+                ) : layer.id === 'compounds' ? (
+                  <LayerCardWithOptions id="compounds" label={layer.label} icon={layer.icon}>
+                    <CompoundOptionsInner />
+                  </LayerCardWithOptions>
+                ) : layer.id === 'streetview' ? (
+                  <LayerCardWithOptions id="streetview" label={layer.label} icon={layer.icon}>
+                    <StreetviewOptionsInner />
+                  </LayerCardWithOptions>
+                ) : (
+                  <LayerCard {...layer} />
+                )}
+              </div>
+            ))}
+          </div>
 
-        <DistrictSelector />
-      </div>
-    </aside>
+          <div className="my-4 border-t border-[var(--color-border)]" />
+
+          <DistrictSelector />
+        </div>
+      </aside>
+    </>
   )
 }

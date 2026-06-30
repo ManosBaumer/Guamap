@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON, ImageOverlay, Polygon, Pane, useMap, useMapEvent } from 'react-leaflet'
-import { Plus, Minus } from 'lucide-react'
+import { Plus, Minus, Layers } from 'lucide-react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useStore } from '@/lib/store'
@@ -843,6 +843,7 @@ function TencentLinesPmtilesLayer({ pmtilesUrl }: { pmtilesUrl: string }) {
 
 function MapZoomButtons({ portalEl }: { portalEl: HTMLElement | null }) {
   const map = useMap()
+  const toggleLayerControl = useStore((s) => s.toggleLayerControl)
   const [zoom, setZoom] = useState(() => map.getZoom())
   const minZoom = map.getMinZoom()
   const maxZoom = map.getMaxZoom()
@@ -861,21 +862,30 @@ function MapZoomButtons({ portalEl }: { portalEl: HTMLElement | null }) {
     <div className="flex flex-col gap-1" role="group" aria-label="Map zoom">
       <button
         type="button"
-        className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-[var(--color-border)] shadow-md text-[var(--color-text)] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-[var(--color-border)] shadow-md text-[var(--color-text)] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors touch-manipulation"
         aria-label="Zoom in"
         disabled={zoom >= maxZoom}
         onClick={() => map.zoomIn(1)}
       >
-        <Plus className="w-5 h-5" aria-hidden />
+        <Plus className="w-5 h-5 pointer-events-none" aria-hidden />
       </button>
       <button
         type="button"
-        className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-[var(--color-border)] shadow-md text-[var(--color-text)] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+        className="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-[var(--color-border)] shadow-md text-[var(--color-text)] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors touch-manipulation"
         aria-label="Zoom out"
         disabled={zoom <= minZoom}
         onClick={() => map.zoomOut(1)}
       >
-        <Minus className="w-5 h-5" aria-hidden />
+        <Minus className="w-5 h-5 pointer-events-none" aria-hidden />
+      </button>
+      <button
+        type="button"
+        className="lg:hidden w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-[var(--color-border)] shadow-md text-[var(--color-text)] hover:bg-gray-50 cursor-pointer transition-colors touch-manipulation"
+        aria-label="Map layers"
+        title="Map layers"
+        onClick={toggleLayerControl}
+      >
+        <Layers className="w-5 h-5 pointer-events-none" aria-hidden />
       </button>
     </div>,
     portalEl,
@@ -1322,7 +1332,7 @@ export default function MapView() {
       <div className="absolute inset-0 overflow-hidden">
         <div
           ref={setZoomControlsEl}
-          className={`absolute bottom-4 right-4 z-[1000] pointer-events-auto${streetviewModalOpen ? ' hidden' : ''}`}
+          className={`absolute top-4 right-4 lg:top-auto lg:bottom-4 z-[1000] pointer-events-auto${streetviewModalOpen ? ' hidden' : ''}`}
         />
         <div
           className="absolute"

@@ -65,6 +65,15 @@ interface AppState {
   communities: Community[]
   setCommunities: (list: Community[]) => void
 
+  /** Below `lg`, the layers sidebar becomes a toggleable drawer over the map. */
+  layerControlOpen: boolean
+  setLayerControlOpen: (open: boolean) => void
+  toggleLayerControl: () => void
+
+  shareSheet: { url: string; title: string } | null
+  openShareSheet: (payload: { url: string; title: string }) => void
+  closeShareSheet: () => void
+
   /**
    * Session-only: community id → `listingCount` when the user last opened it.
    * A marker counts as "viewed" only while `sessionViewedCommunityCounts[id] === community.listingCount`
@@ -206,6 +215,14 @@ export const useStore = create<AppState>((set, get) => ({
   },
   baseMapStyle: 'satellite',
   setBaseMapStyle: (style: BaseMapStyle) => set({ baseMapStyle: style }),
+
+  layerControlOpen: false,
+  setLayerControlOpen: (open) => set({ layerControlOpen: open }),
+  toggleLayerControl: () => set((s) => ({ layerControlOpen: !s.layerControlOpen })),
+
+  shareSheet: null,
+  openShareSheet: (payload) => set({ shareSheet: payload }),
+  closeShareSheet: () => set({ shareSheet: null }),
   streetviewProvider: 'tencent',
   setStreetviewProvider: (provider) => set({ streetviewProvider: provider }),
   toggleLayer: (layer) =>
