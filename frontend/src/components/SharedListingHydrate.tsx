@@ -5,29 +5,35 @@ import {
   readPendingShareLink,
 } from '@/lib/listingShare'
 
-/** Open a listing when the page loads with `?listing=&community=` share params. */
+/** Open a listing or community when the page loads with share query params. */
 export default function SharedListingHydrate() {
   const communities = useStore((s) => s.communities)
   const openSharedListing = useStore((s) => s.openSharedListing)
+  const openSharedCommunity = useStore((s) => s.openSharedCommunity)
   const startedRef = useRef(false)
 
   useEffect(() => {
     if (startedRef.current) return
-    const link = readPendingShareLink()
-    if (!link) return
+    const pending = readPendingShareLink()
+    if (!pending) return
     if (communities.length === 0) return
 
     startedRef.current = true
 
-    void openSharedListing(link).then((ok) => {
+    const open =
+      pending.kind === 'listing'
+        ? openSharedListing(pending.link)
+        : openSharedCommunity(pending.communityId)
+
+    void open.then((ok) => {
       if (ok) {
         clearPendingShareLink()
       } else {
         startedRef.current = false
-        console.warn('[guamap] Shared listing link could not be opened:', link)
+        console.warn('[guamap] Shared link could not be opened:', pending)
       }
     })
-  }, [communities.length, openSharedListing])
+  }, [communities.length, openSharedListing, openSharedCommunity])
 
   return null
 }

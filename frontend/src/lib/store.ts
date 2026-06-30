@@ -97,6 +97,8 @@ interface AppState {
   setMapFocusedListingId: (id: number | null) => void
   /** Bumped by panel "On map" — MapFocusController flies when this changes. */
   mapFlyToNonce: number
+  /** Optional map target when flying without a focused listing (e.g. shared community). */
+  mapFlyToPoint: { lat: number; lng: number } | null
   flyToListingOnMap: (id: number) => void
   /** Panel listing order for map offsets in community mode (synced from ListingPanel). */
   panelListingOrderIds: number[]
@@ -107,6 +109,7 @@ interface AppState {
   /** Fallback listing payload from share URL when no longer in community data. */
   sharedListingSnapshot: Listing | null
   openSharedListing: (link: ParsedListingShareLink) => Promise<boolean>
+  openSharedCommunity: (communityId: string) => Promise<boolean>
   clearSharedListing: () => void
 
   sort: SortMode
@@ -418,9 +421,11 @@ export const useStore = create<AppState>((set, get) => ({
   mapFocusedListingId: null,
   setMapFocusedListingId: (id) => set({ mapFocusedListingId: id }),
   mapFlyToNonce: 0,
+  mapFlyToPoint: null,
   flyToListingOnMap: (id) =>
     set((s) => ({
       mapFocusedListingId: id,
+      mapFlyToPoint: null,
       mapFlyToNonce: s.mapFlyToNonce + 1,
     })),
   panelListingOrderIds: [],
@@ -467,8 +472,30 @@ export const useStore = create<AppState>((set, get) => ({
       sharedListingFocusId: listing!.id,
       sharedListingSnapshot: snapshot,
       mapFocusedListingId: listing!.id,
+      mapFlyToPoint: null,
       mapFlyToNonce: s.mapFlyToNonce + 1,
       sessionViewedCommunityCounts,
+    }))
+    return true
+  },
+
+  openSharedCommunity: async (communityId) => {
+    const community = get().communities.find((c) => c.id === communityId)
+    if (!community) return false
+
+    set({
+      savedMapViewActive: false,
+      sharedListingFocusId: null,
+      sharedListingSnapshot: null,
+      mapFocusedListingId: null,
+      layers: { ...get().layers, anjuke: true },
+    })
+
+    get().selectCommunity(community)
+
+    set((s) => ({
+      mapFlyToPoint: { lat: community.lat, lng: community.lng },
+      mapFlyToNonce: s.mapFlyToNonce + 1,
     }))
     return true
   },

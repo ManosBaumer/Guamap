@@ -4,7 +4,7 @@ import { useStore } from '@/lib/store'
 import { ajkImgUrl, ajkThumbUrl, ajkListingUrl, translateText } from '@/lib/data'
 import type { Listing } from '@/lib/types'
 import { listingBedCount, listingBathCount } from '@/lib/listingLayout'
-import { buildListingShareUrl, copyOrShareListingUrl } from '@/lib/listingShare'
+import { buildListingShareUrl, copyOrShareUrl } from '@/lib/listingShare'
 import {
   orientLabelEn,
   rentTypeLabelEn,
@@ -50,19 +50,14 @@ function ListingCard({
   const [translating, setTranslating] = useState(false)
   const [showTranslation, setShowTranslation] = useState(false)
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false)
-  const [shareHint, setShareHint] = useState<string | null>(null)
 
   const handleShare = async () => {
     if (!communityId) return
     const url = buildListingShareUrl({ listing, communityId, communityName })
     try {
-      const mode = await copyOrShareListingUrl(url, listing.title)
-      setShareHint(mode === 'shared' ? 'Shared!' : 'Link copied!')
-      window.setTimeout(() => setShareHint(null), 2000)
+      await copyOrShareUrl(url, listing.title)
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
-      setShareHint('Could not share')
-      window.setTimeout(() => setShareHint(null), 2000)
     }
   }
 
@@ -158,7 +153,7 @@ function ListingCard({
           onClick={() => void handleShare()}
           disabled={!communityId}
           className="shrink-0 w-8 h-8 -mt-0.5 -mr-1 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          title={shareHint ?? 'Share listing link'}
+          title="Share listing link"
           aria-label="Share listing link"
         >
           <Share2 className="w-[18px] h-[18px] text-[var(--color-text)]" />
@@ -285,11 +280,6 @@ function ListingCard({
           <MapPin className="w-3.5 h-3.5 shrink-0" />
           On map
         </button>
-        {shareHint && (
-          <span className="text-xs text-[var(--color-primary)] font-medium" role="status">
-            {shareHint}
-          </span>
-        )}
         <a
           href={ajkListingUrl(listing.id)}
           target="_blank"

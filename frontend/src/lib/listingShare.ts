@@ -21,6 +21,16 @@ export type ParsedListingShareLink = {
   snapshot: ListingShareSnapshot | null
 }
 
+export type PendingShareLink =
+  | { kind: 'listing'; link: ParsedListingShareLink }
+  | { kind: 'community'; communityId: string }
+
+export function buildCommunityShareUrl(communityId: string): string {
+  const url = new URL(window.location.origin + window.location.pathname)
+  url.searchParams.set(COMMUNITY_SHARE_PARAM, communityId)
+  return url.toString()
+}
+
 export function buildListingShareUrl(args: {
   listing: Listing
   communityId: string
@@ -43,8 +53,8 @@ export function buildListingShareUrl(args: {
 }
 
 /** Read share params from the URL and persist until consumed (survives StrictMode + early URL strip). */
-export function readPendingShareLink(): ParsedListingShareLink | null {
-  const fromUrl = parseListingShareLink(window.location.search)
+export function readPendingShareLink(): PendingShareLink | null {
+  const fromUrl = parseShareLinkFromSearch(window.location.search)
   if (fromUrl) {
     try {
       sessionStorage.setItem(PENDING_SHARE_LINK_KEY, JSON.stringify(fromUrl))
@@ -56,10 +66,48 @@ export function readPendingShareLink(): ParsedListingShareLink | null {
   try {
     const raw = sessionStorage.getItem(PENDING_SHARE_LINK_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as ParsedListingShareLink
+    return parseStoredPendingShare(raw)
   } catch {
     return null
   }
+}
+
+function parseStoredPendingShare(raw: string): PendingShareLink | null {
+  const parsed = JSON.parse(raw) as unknown
+  if (!parsed || typeof parsed !== 'object') return null
+  const obj = parsed as Record<string, unknown>
+  if (obj.kind === 'community' && typeof obj.communityId === 'string') {
+    return { kind: 'community', communityId: obj.communityId }
+  }
+  if (obj.kind === 'listing' && obj.link && typeof obj.link === 'object') {
+    const link = obj.link as ParsedListingShareLink
+    if (link.communityId && Number.isFinite(link.listingId)) {
+      return { kind: 'listing', link }
+    }
+  }
+  // Legacy: bare listing share object
+  const legacy = parsed as ParsedListingShareLink
+  if (legacy.communityId && Number.isFinite(legacy.listingId)) {
+    return { kind: 'listing', link: legacy }
+  }
+  return null
+}
+
+export function parseShareLinkFromSearch(search: string): PendingShareLink | null {
+  const listing = parseListingShareLink(search)
+  if (listing) return { kind: 'listing', link: listing }
+  const communityId = parseCommunityShareLink(search)
+  if (communityId) return { kind: 'community', communityId }
+  return null
+}
+
+export function parseCommunityShareLink(search: string): string | null {
+  const params = new URLSearchParams(search)
+  const communityId = params.get(COMMUNITY_SHARE_PARAM)?.trim()
+  if (!communityId) return null
+  if (params.get(LISTING_SHARE_PARAM)) return null
+  if (params.get(SNAPSHOT_SHARE_PARAM)) return null
+  return communityId
 }
 
 export function clearPendingShareLink(): void {
@@ -83,8 +131,13 @@ export function parseListingShareLink(search: string): ParsedListingShareLink | 
   return { listingId, communityId, snapshot }
 }
 
+export function hasShareLink(search: string): boolean {
+  return parseShareLinkFromSearch(search) !== null
+}
+
+/** @deprecated Use hasShareLink */
 export function hasListingShareLink(search: string): boolean {
-  return parseListingShareLink(search) !== null
+  return hasShareLink(search)
 }
 
 export function stripListingShareParamsFromUrl(): void {
@@ -126,7 +179,7 @@ export function decodeListingShareSnapshot(encoded: string): ListingShareSnapsho
   }
 }
 
-export async function copyOrShareListingUrl(url: string, title: string): Promise<'shared' | 'copied'> {
+export async function copyOrShareUrl(url: string, title: string): Promise<'shared' | 'copied'> {
   if (typeof navigator.share === 'function') {
     try {
       await navigator.share({ title: title.replace(/【已下架】/g, '').trim(), url })

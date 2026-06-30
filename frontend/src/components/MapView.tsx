@@ -450,6 +450,14 @@ function MapFocusController({ mapFilterOpts }: { mapFilterOpts: MapLocationFilte
     lastHandledFlyToNonce.current = mapFlyToNonce
 
     const st = useStore.getState()
+    const flyPoint = st.mapFlyToPoint
+    if (flyPoint) {
+      const z = Math.max(map.getZoom(), 15)
+      map.flyTo([flyPoint.lat, flyPoint.lng], z, { duration: 0.42, easeLinearity: 0.22 })
+      useStore.setState({ mapFlyToPoint: null })
+      return
+    }
+
     const listingId = st.mapFocusedListingId
     if (listingId == null) return
     const pos = resolveListingMapPosition({

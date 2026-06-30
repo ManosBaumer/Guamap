@@ -1,4 +1,4 @@
-import { X, ArrowUpDown, ExternalLink } from "lucide-react";
+import { X, ArrowUpDown, ExternalLink, Share2 } from "lucide-react";
 
 import { useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 
@@ -13,6 +13,7 @@ import type { SortMode } from "@/lib/types";
 
 import ListingCard from "./ListingCard";
 import TransitPlannerPanel from "./TransitPlannerPanel";
+import { buildCommunityShareUrl, copyOrShareUrl } from "@/lib/listingShare";
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: "price-asc", label: "Price ↑" },
@@ -165,6 +166,16 @@ export default function ListingPanel() {
     return () => cancelAnimationFrame(h);
   }, [mapFocusedListingId]);
 
+  const handleShareCommunity = useCallback(async () => {
+    if (!selectedCommunity) return;
+    const url = buildCommunityShareUrl(selectedCommunity.id);
+    try {
+      await copyOrShareUrl(url, selectedCommunity.name);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+    }
+  }, [selectedCommunity]);
+
   if (transitPlannerOpen) {
     return <TransitPlannerPanel />
   }
@@ -265,6 +276,15 @@ export default function ListingPanel() {
 
       <div className="px-5 pt-5 pb-3 relative">
         <div className="absolute top-4 right-4 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void handleShareCommunity()}
+            className="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
+            title="Share community link"
+            aria-label="Share community link"
+          >
+            <Share2 className="w-4 h-4 text-gray-400" />
+          </button>
           {comm.anjukeId && (
             <a
               href={`https://guangzhou.anjuke.com/community/view/${comm.anjukeId}`}
