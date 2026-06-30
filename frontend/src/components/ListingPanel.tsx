@@ -49,6 +49,8 @@ export default function ListingPanel() {
     mapFocusedListingId,
     setPanelListingOrderIds,
     transitPlannerOpen,
+    sharedListingFocusId,
+    sharedListingSnapshot,
   } = useStore(
     useShallow((s) => ({
       selectedCommunity: s.selectedCommunity,
@@ -68,6 +70,8 @@ export default function ListingPanel() {
       mapFocusedListingId: s.mapFocusedListingId,
       setPanelListingOrderIds: s.setPanelListingOrderIds,
       transitPlannerOpen: s.transitPlannerOpen,
+      sharedListingFocusId: s.sharedListingFocusId,
+      sharedListingSnapshot: s.sharedListingSnapshot,
     })),
   );
 
@@ -109,8 +113,25 @@ export default function ListingPanel() {
   const filteredCommunityListings = useMemo(() => {
     if (!selectedListings) return [];
 
-    return filterAndSortListings(selectedListings, appliedFilters, sort, true);
-  }, [selectedListings, appliedFilters, sort]);
+    let pool = selectedListings;
+    if (
+      sharedListingSnapshot &&
+      !pool.some((l) => l.id === sharedListingSnapshot.id)
+    ) {
+      pool = [...pool, sharedListingSnapshot];
+    }
+
+    let result = filterAndSortListings(pool, appliedFilters, sort, true);
+
+    if (sharedListingFocusId != null) {
+      const pinned = pool.find((l) => l.id === sharedListingFocusId);
+      if (pinned && !result.some((l) => l.id === sharedListingFocusId)) {
+        result = [pinned, ...result];
+      }
+    }
+
+    return result;
+  }, [selectedListings, appliedFilters, sort, sharedListingFocusId, sharedListingSnapshot]);
 
   const filteredSavedListings = useMemo(
     () => getFilteredSavedListings(savedListings, appliedFilters, sort, hideOffMarket),

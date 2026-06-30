@@ -1,9 +1,10 @@
-import { Compass, TrainFront, Bed, Bath, Paintbrush, Languages, Home, Star, MapPin, Sparkles, ChevronDown } from 'lucide-react'
+import { Compass, TrainFront, Bed, Bath, Paintbrush, Languages, Home, Star, MapPin, Sparkles, ChevronDown, Share2 } from 'lucide-react'
 import { memo, useState } from 'react'
 import { useStore } from '@/lib/store'
 import { ajkImgUrl, ajkThumbUrl, ajkListingUrl, translateText } from '@/lib/data'
 import type { Listing } from '@/lib/types'
 import { listingBedCount, listingBathCount } from '@/lib/listingLayout'
+import { buildListingShareUrl, copyOrShareListingUrl } from '@/lib/listingShare'
 import {
   orientLabelEn,
   rentTypeLabelEn,
@@ -49,6 +50,21 @@ function ListingCard({
   const [translating, setTranslating] = useState(false)
   const [showTranslation, setShowTranslation] = useState(false)
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false)
+  const [shareHint, setShareHint] = useState<string | null>(null)
+
+  const handleShare = async () => {
+    if (!communityId) return
+    const url = buildListingShareUrl({ listing, communityId, communityName })
+    try {
+      const mode = await copyOrShareListingUrl(url, listing.title)
+      setShareHint(mode === 'shared' ? 'Shared!' : 'Link copied!')
+      window.setTimeout(() => setShareHint(null), 2000)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      setShareHint('Could not share')
+      window.setTimeout(() => setShareHint(null), 2000)
+    }
+  }
 
   const hashes = listing.imgHashes || []
   /** Full-res URLs for modal (600×600). */
@@ -125,7 +141,7 @@ function ListingCard({
           onClick={() =>
             toggleSavedListing({ listing, communityId, communityName })
           }
-          className="shrink-0 w-8 h-8 -mt-0.5 -mr-1 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
+          className="shrink-0 w-8 h-8 -mt-0.5 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
           title={saved ? 'Remove from saved' : 'Save listing'}
           aria-label={saved ? 'Remove from saved' : 'Save listing'}
           aria-pressed={saved}
@@ -136,6 +152,16 @@ function ListingCard({
               : 'text-[var(--color-text)]'
               }`}
           />
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleShare()}
+          disabled={!communityId}
+          className="shrink-0 w-8 h-8 -mt-0.5 -mr-1 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          title={shareHint ?? 'Share listing link'}
+          aria-label="Share listing link"
+        >
+          <Share2 className="w-[18px] h-[18px] text-[var(--color-text)]" />
         </button>
       </div>
       {showTranslation && translatedTitle && (
@@ -259,6 +285,11 @@ function ListingCard({
           <MapPin className="w-3.5 h-3.5 shrink-0" />
           On map
         </button>
+        {shareHint && (
+          <span className="text-xs text-[var(--color-primary)] font-medium" role="status">
+            {shareHint}
+          </span>
+        )}
         <a
           href={ajkListingUrl(listing.id)}
           target="_blank"

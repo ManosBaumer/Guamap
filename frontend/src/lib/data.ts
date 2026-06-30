@@ -1,4 +1,5 @@
 import type { Community, Listing, ListingMetadata, Stop, HeatmapBounds, ScutLocation, StreetviewIndex, StreetviewProvider } from './types'
+import { listingIdNumber } from './listingIds'
 
 const BASE = import.meta.env.BASE_URL + 'data'
 
@@ -16,8 +17,12 @@ function parseBathroomCountFromListing(l: Listing): number | null {
 }
 
 function normalizeListing(l: Listing): Listing {
+  const id = listingIdNumber(l.id)
   const bathroomCount = parseBathroomCountFromListing(l)
-  return bathroomCount === l.bathroomCount ? l : { ...l, bathroomCount }
+  let next: Listing = l
+  if (id != null && id !== l.id) next = { ...l, id }
+  if (bathroomCount !== next.bathroomCount) next = { ...next, bathroomCount }
+  return next
 }
 
 const _listingsByCommunityId = new Map<string, Listing[]>()
@@ -34,8 +39,11 @@ export async function loadListings(communityId: string): Promise<Listing[]> {
   const raw: Listing[] = await res.json()
   const uniqueListings = new Map<number, Listing>()
   for (const l of raw) {
-    if (!uniqueListings.has(l.id)) {
-      uniqueListings.set(l.id, l)
+    const normalized = normalizeListing(l)
+    const id = listingIdNumber(normalized.id)
+    if (id == null) continue
+    if (!uniqueListings.has(id)) {
+      uniqueListings.set(id, normalized.id === id ? normalized : { ...normalized, id })
     }
   }
   const data = Array.from(uniqueListings.values()).map(normalizeListing)

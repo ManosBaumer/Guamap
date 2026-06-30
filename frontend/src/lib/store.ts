@@ -21,6 +21,9 @@ import {
 } from './transitRouteTypes'
 
 import { supabase } from './supabase'
+import { loadListings } from './data'
+import type { ParsedListingShareLink } from './listingShare'
+import { listingIdNumber } from './listingIds'
 
 type TransitPickMode = 'none' | 'community' | 'map'
 
@@ -98,6 +101,13 @@ interface AppState {
   /** Panel listing order for map offsets in community mode (synced from ListingPanel). */
   panelListingOrderIds: number[]
   setPanelListingOrderIds: (ids: number[]) => void
+
+  /** Opened via share link — always shown in the panel even when sold / filtered out. */
+  sharedListingFocusId: number | null
+  /** Fallback listing payload from share URL when no longer in community data. */
+  sharedListingSnapshot: Listing | null
+  openSharedListing: (link: ParsedListingShareLink) => Promise<boolean>
+  clearSharedListing: () => void
 
   sort: SortMode
   setSort: (sort: SortMode) => void
@@ -286,6 +296,8 @@ export const useStore = create<AppState>((set, get) => ({
           selectedCommunity: null,
           selectedListings: null,
           mapFocusedListingId: null,
+          sharedListingFocusId: null,
+          sharedListingSnapshot: null,
         }
       }
       const sessionViewedCommunityCounts = {
@@ -300,6 +312,8 @@ export const useStore = create<AppState>((set, get) => ({
           mapFocusedListingId: null,
           savedMapViewActive: false,
           sessionViewedCommunityCounts,
+          sharedListingFocusId: null,
+          sharedListingSnapshot: null,
         }
       }
       return {
@@ -308,6 +322,8 @@ export const useStore = create<AppState>((set, get) => ({
         mapFocusedListingId: null,
         savedMapViewActive: false,
         sessionViewedCommunityCounts,
+        sharedListingFocusId: null,
+        sharedListingSnapshot: null,
       }
     }),
   setSelectedListings: (listings) => set({ selectedListings: listings, loadingListings: false }),
@@ -409,6 +425,53 @@ export const useStore = create<AppState>((set, get) => ({
     })),
   panelListingOrderIds: [],
   setPanelListingOrderIds: (ids) => set({ panelListingOrderIds: ids }),
+
+  sharedListingFocusId: null,
+  sharedListingSnapshot: null,
+  clearSharedListing: () => set({ sharedListingFocusId: null, sharedListingSnapshot: null }),
+  openSharedListing: async (link) => {
+    const community = get().communities.find((c) => c.id === link.communityId)
+    if (!community) return false
+
+    set({
+      loadingListings: true,
+      savedMapViewActive: false,
+      layers: { ...get().layers, anjuke: true },
+    })
+
+    const listings = await loadListings(link.communityId)
+    let listing = listings.find((l) => listingIdNumber(l.id) === link.listingId)
+    let snapshot: Listing | null = null
+
+    if (!listing && link.snapshot) {
+      listing = link.snapshot.listing
+      const id = listingIdNumber(listing.id)
+      if (id != null && listing.id !== id) listing = { ...listing, id }
+      snapshot = listing
+    }
+
+    if (!listing) {
+      set({ loadingListings: false })
+      return false
+    }
+
+    const sessionViewedCommunityCounts = {
+      ...get().sessionViewedCommunityCounts,
+      [community.id]: community.listingCount,
+    }
+
+    set((s) => ({
+      selectedCommunity: community,
+      selectedListings: listings,
+      loadingListings: false,
+      sharedListingFocusId: listing!.id,
+      sharedListingSnapshot: snapshot,
+      mapFocusedListingId: listing!.id,
+      mapFlyToNonce: s.mapFlyToNonce + 1,
+      sessionViewedCommunityCounts,
+    }))
+    return true
+  },
 
   sort: 'price-asc',
   setSort: (sort) => set({ sort }),
