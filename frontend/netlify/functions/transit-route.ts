@@ -2,6 +2,19 @@ import { processTransitRouteBody } from '../../server/transitRouteHandler'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=utf-8' }
 
+/**
+ * Throttle this path — it proxies the paid Amap transit API with no auth of its own.
+ * Without this, anyone can hammer /api/transit-route and drain the AMAP_KEY quota.
+ */
+export const config = {
+  path: '/api/transit-route',
+  rateLimit: {
+    windowLimit: 20,
+    windowSize: 60,
+    aggregateBy: ['ip', 'domain'],
+  },
+}
+
 export default async (request: Request): Promise<Response> => {
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'method_not_allowed' }), {

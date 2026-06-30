@@ -9,13 +9,19 @@
 [build.environment]
   SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_URL"
 
-# Transit planner API (serverless — needs AMAP_KEY in Netlify env vars)
-[[redirects]]
-  from   = "/api/transit-route"
-  to     = "/.netlify/functions/transit-route"
-  status = 200
-  force  = true
+# Baseline security headers (no CSP yet — app loads many third-party map/image
+# hosts; a strict CSP needs careful enumeration before being added safely).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), camera=(), microphone=()"
 
+# Transit planner API (serverless — needs AMAP_KEY in Netlify env vars).
+# The function declares its own path + rate limit via `export const config`
+# in netlify/functions/transit-route.ts, so no redirect is needed here.
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
