@@ -97,10 +97,10 @@ export function listingMatchesFilters(l: Listing, filters: Filters): boolean {
 }
 
 export function countMatchingListings(listings: Listing[], filters: Filters): number {
-  if (!filtersAreActive(filters)) return listings.length
   let n = 0
   for (const l of listings) {
-    if (listingMatchesFilters(l, filters)) n++
+    if (isListingOffMarket(l)) continue
+    if (!filtersAreActive(filters) || listingMatchesFilters(l, filters)) n++
   }
   return n
 }

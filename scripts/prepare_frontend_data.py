@@ -233,6 +233,7 @@ def prepare_anjuke():
     index_metadata = []
     index = []
     total_listings = 0
+    off_market_ids: list = []
     for cname, comm in name_to_comm.items():
         listings = comm.pop("listings")
         if not listings:
@@ -242,6 +243,10 @@ def prepare_anjuke():
         cid = comm["id"]
         for l in listings:
             # We only keep fields needed by listingMatchesFilters
+            if OFF_MARKET_TAG in str(l.get("title", "")):
+                lid = l.get("id")
+                if lid is not None:
+                    off_market_ids.append(lid)
             meta = {
                 "id": l["id"],
                 "c": cid,
@@ -256,8 +261,9 @@ def prepare_anjuke():
             }
             index_metadata.append(meta)
 
-        prices = [l["price"] for l in listings if l["price"] and l["price"] > 0]
-        comm["listingCount"] = len(listings)
+        active_listings = [l for l in listings if OFF_MARKET_TAG not in str(l.get("title", ""))]
+        prices = [l["price"] for l in active_listings if l["price"] and l["price"] > 0]
+        comm["listingCount"] = len(active_listings)
         comm["priceMin"] = min(prices) if prices else 0
         comm["priceMax"] = max(prices) if prices else 0
         index.append(comm)
@@ -272,6 +278,12 @@ def prepare_anjuke():
     
     meta_file = OUT / "listings_metadata.json"
     meta_file.write_text(json.dumps(index_metadata, separators=(",", ":")), encoding="utf-8")
+
+    off_market_file = OUT / "off_market_listing_ids.json"
+    off_market_file.write_text(
+        json.dumps(sorted(set(off_market_ids)), separators=(",", ":")),
+        encoding="utf-8",
+    )
 
     valid_community_ids = {comm["id"] for comm in index}
     removed_files = 0

@@ -25,7 +25,7 @@ import {
   loadCommunities, loadStops, loadMetroGeoJSON, loadCompoundsGeoJSON,
   loadStreetviewIndex,
   loadHeatmapBounds, loadScutLocation, loadDistricts,
-  heatmapRasterUrl, loadListings, loadListingsMetadata,
+  heatmapRasterUrl, loadListings, loadListingsMetadata, loadOffMarketListingIds,
 } from '@/lib/data'
 import {
   countMatchingListings,
@@ -642,6 +642,7 @@ function CommunityMarkers({
           isSessionViewed,
         })
       } else {
+        if (comm.listingCount === 0) continue
         out.push({
           comm,
           displayCount: comm.listingCount,
@@ -1229,12 +1230,16 @@ export default function MapView() {
     const tid = window.setTimeout(() => {
       if (cancelled) return
       void (async () => {
-        const metadata = await loadListingsMetadata()
+        const [metadata, offMarketIds] = await Promise.all([
+          loadListingsMetadata(),
+          loadOffMarketListingIds(),
+        ])
         if (cancelled) return
         
         let sum = 0
         for (const m of metadata) {
           if (ids.has(m.c)) {
+            if (offMarketIds.has(m.id)) continue
             if (listingMetadataMatchesFilters(m, filtersSnapshot)) {
               sum++
             }

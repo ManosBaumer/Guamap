@@ -5,8 +5,13 @@ export function filterAndSortListings(
   listings: Listing[],
   filters: Filters,
   sort: SortMode,
+  excludeOffMarket = false,
 ): Listing[] {
-  let result = listings.filter((l) => listingMatchesFilters(l, filters))
+  let result = listings
+  if (excludeOffMarket) {
+    result = result.filter((l) => !isListingOffMarket(l))
+  }
+  result = result.filter((l) => listingMatchesFilters(l, filters))
 
   result.sort((a, b) => {
     if (sort === 'price-asc') return a.price - b.price
@@ -30,7 +35,7 @@ export function filteredSavedListings(
   if (hideOffMarket) {
     listings = listings.filter((l) => !isListingOffMarket(l))
   }
-  return filterAndSortListings(listings, filters, sort)
+  return filterAndSortListings(listings, filters, sort, hideOffMarket)
 }
 
 /** Saved snapshots in the same order as filtered/sorted listings (for panel + map). */

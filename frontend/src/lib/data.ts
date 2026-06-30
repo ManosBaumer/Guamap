@@ -44,6 +44,7 @@ export async function loadListings(communityId: string): Promise<Listing[]> {
 }
 
 let _metadataPromise: Promise<ListingMetadata[]> | null = null
+let _offMarketIdsPromise: Promise<Set<number>> | null = null
 
 /** Fetches global listing metadata (minimal fields for filtering). Cached once. */
 export async function loadListingsMetadata(): Promise<ListingMetadata[]> {
@@ -54,6 +55,19 @@ export async function loadListingsMetadata(): Promise<ListingMetadata[]> {
     return res.json()
   })()
   return _metadataPromise
+}
+
+/** Listing ids tagged 【已下架】 — used to exclude sold listings from map counts. */
+export async function loadOffMarketListingIds(): Promise<Set<number>> {
+  if (_offMarketIdsPromise) return _offMarketIdsPromise
+  _offMarketIdsPromise = (async () => {
+    const res = await fetch(`${BASE}/off_market_listing_ids.json`)
+    if (!res.ok) return new Set()
+    const raw: unknown = await res.json()
+    if (!Array.isArray(raw)) return new Set()
+    return new Set(raw.filter((id): id is number => typeof id === 'number'))
+  })()
+  return _offMarketIdsPromise
 }
 
 export async function loadStops(): Promise<Stop[]> {

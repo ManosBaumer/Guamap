@@ -109,7 +109,7 @@ export default function ListingPanel() {
   const filteredCommunityListings = useMemo(() => {
     if (!selectedListings) return [];
 
-    return filterAndSortListings(selectedListings, appliedFilters, sort);
+    return filterAndSortListings(selectedListings, appliedFilters, sort, true);
   }, [selectedListings, appliedFilters, sort]);
 
   const filteredSavedListings = useMemo(
